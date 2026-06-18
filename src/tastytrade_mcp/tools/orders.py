@@ -68,8 +68,11 @@ def register(mcp, config: Config) -> None:
 
         Args:
             order: Order spec with keys: ``time_in_force`` ("Day"/"GTC"),
-                ``order_type`` ("Limit"/"Market"), ``price`` (signed limit; use
-                negative for a net credit), and ``legs`` — a list of
+                ``order_type`` ("Limit"/"Market"/"Stop"/"Stop Limit"), ``price``
+                (signed limit; negative for a net credit), optional
+                ``price_effect`` ("Debit"/"Credit", applied to the sign of
+                ``price``), optional ``stop_trigger`` (trigger price for stop /
+                stop-limit orders), and ``legs`` — a list of
                 {instrument_type, symbol, quantity, action}. ``action`` is one of
                 "Buy to Open", "Sell to Open", "Buy to Close", "Sell to Close".
             account_number: Account to trade in. Defaults to the stored default.
@@ -331,7 +334,14 @@ _ACTION_MAP = {
 
 
 def _build_order(spec: dict[str, Any]) -> NewOrder:
-    """Translate a JSON order spec into a tastytrade NewOrder."""
+    """Translate a JSON order spec into a tastytrade NewOrder.
+
+    Supports limit and stop-limit orders. Debit/credit direction is conveyed by
+    the sign of ``price`` (negative = credit, positive = debit). For ergonomics
+    the spec may instead pass ``price_effect`` ("Debit"/"Credit"), which is
+    applied to the sign of ``price`` — note ``NewOrder`` has no ``price_effect``
+    field in this SDK version, so it must not be passed through directly.
+    """
     from tastytrade.order import Leg
 
     tif = OrderTimeInForce(str(spec.get("time_in_force", "Day")))
@@ -352,6 +362,17 @@ def _build_order(spec: dict[str, Any]) -> NewOrder:
         "order_type": otype,
         "legs": legs,
     }
-    if "price" in spec and spec["price"] is not None:
-        kwargs["price"] = Decimal(str(spec["price"]))
+    if spec.get("price") is not None:
+        price = Decimal(str(spec["price"]))
+        effect = spec.get("price_effect")
+        if effect is not None:
+            # Apply direction via the sign of price; "Credit" => negative.
+            magnitude = abs(price)
+            price = -magnitude if str(effect).strip().lower() == "credit" else magnitude
+        kwargs["price"] = price
+
+    # Stop / stop-limit trigger price.
+    if spec.get("stop_trigger") is not None:
+        kwargs["stop_trigger"] = Decimal(str(spec["stop_trigger"]))
+
     return NewOrder(**kwargs)
