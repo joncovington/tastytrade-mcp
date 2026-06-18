@@ -1,0 +1,9 @@
+# Normalize all text files to LF in the repository.
+* text=auto eol=lf
+
+# Explicitly treat common binaries as binary (no EOL conversion).
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.whl binary
