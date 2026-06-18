@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets / config — NEVER commit
+.env
+*.env
+!.env.example
+session_cache.json
+
+# OS
+.DS_Store
+Thumbs.db
