@@ -137,3 +137,20 @@ figures (`account_deployed_current`, `account_deployed_after`,
 pip install -e .[dev]
 pytest
 ```
+
+## Disclaimer
+
+This software can place real orders against a live brokerage account. It is
+provided **"as is", with no warranty**, and is **not financial advice**. You are
+solely responsible for any trades it places and any resulting losses. Test in the
+sandbox (`TASTYTRADE_SANDBOX=true`) before enabling live trading, and review the
+order-safety controls above. The built-in risk checks reduce — but do not
+eliminate — the risk of an unintended or oversized order.
+
+This is an independent project and is **not affiliated with, endorsed by, or
+sponsored by tastytrade**. It uses the unofficial third-party
+[`tastytrade`](https://github.com/tastyware/tastytrade) SDK.
+
+## License
+
+[MIT](LICENSE) © 2026 Jon Covington
