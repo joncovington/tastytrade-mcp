@@ -37,6 +37,16 @@
     "XSP": { "implied_volatility_rank": "0.61", "implied_volatility_percentile": "0.70", "beta": "1.0" }
   },
 
+  "option_chain": {
+    "_comment": "Optional. Keys are ISO expiration dates; values are option lists. If omitted, a chain is generated procedurally. Replace the date below with a near-future date when you exercise get_strategies.",
+    "2099-01-15": [
+      { "strike": 580, "option_type": "Call", "symbol": "XSP   990115C00580000" },
+      { "strike": 585, "option_type": "Call", "symbol": "XSP   990115C00585000" },
+      { "strike": 540, "option_type": "Put",  "symbol": "XSP   990115P00540000" },
+      { "strike": 535, "option_type": "Put",  "symbol": "XSP   990115P00535000" }
+    ]
+  },
+
   "_error_injection_examples": {
     "to_reject_an_order": "set order_response.errors to a non-empty list, e.g. [\"Insufficient option level\"]",
     "to_simulate_an_outage": "set raise.<method> to a message, e.g. {\"raise\": {\"get_positions\": \"502 Bad Gateway\"}}"

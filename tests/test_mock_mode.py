@@ -181,6 +181,31 @@ async def test_fixture_can_simulate_endpoint_outage(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_fixture_defines_option_chain(tmp_path):
+    from datetime import date, timedelta
+
+    exp = (date.today() + timedelta(days=2)).isoformat()
+    fixture = _write_fixture(
+        tmp_path,
+        {
+            "option_chain": {
+                exp: [
+                    {"strike": 580, "option_type": "Call", "symbol": f"XSP {exp} C580"},
+                    {"strike": 540, "option_type": "Put", "symbol": f"XSP {exp} P540"},
+                ]
+            }
+        },
+    )
+    mcp = build_server(_mock_config(mock_fixture=fixture))
+
+    chain = await _call(mcp, "get_option_chain", {"symbol": "XSP"})
+    assert chain["ok"]
+    assert exp in chain["chain"]
+    symbols = [o["symbol"] for o in chain["chain"][exp]]
+    assert f"XSP {exp} C580" in symbols and f"XSP {exp} P540" in symbols
+
+
+@pytest.mark.asyncio
 async def test_fixture_account_deploy_limit_uses_fixture_balances(tmp_path):
     # used 9000 + available 1000 -> capacity 10000; 50% cap = 5000.
     # Order consumes 1500 (default BPE) -> deployed 9000+1500=10500 > 5000 -> reject.

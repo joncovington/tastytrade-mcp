@@ -159,6 +159,25 @@ class _MockOption(_Record):
         self.symbol = symbol
 
 
+def _build_fixture_chain(spec: dict[str, Any] | None):
+    """Build an option chain from a fixture mapping of ISO expiration date ->
+    list of {strike, option_type, symbol}. Returns None when not provided."""
+    if not spec:
+        return None
+    chain = {}
+    for exp_str, options in spec.items():
+        if exp_str.startswith("_"):  # skip comment keys
+            continue
+        exp = date.fromisoformat(exp_str)
+        chain[exp] = [
+            _MockOption(
+                o["strike"], o.get("option_type", "Call"), o["symbol"]
+            )
+            for o in options
+        ]
+    return chain
+
+
 def mock_option_chain(symbol):
     near = date.today() + timedelta(days=1)
     far = date.today() + timedelta(days=45)
@@ -212,7 +231,11 @@ def install_mocks(config=None, setter=setattr) -> MockAccount:
             out.append(_Record({"symbol": s.upper(), **data}))
         return out
 
+    fixture_chain = _build_fixture_chain(fixture.get("option_chain"))
+
     async def fake_chain(_session, symbol):
+        if fixture_chain is not None:
+            return fixture_chain
         return mock_option_chain(symbol.upper())
 
     setter(Account, "get", fake_get)

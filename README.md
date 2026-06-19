@@ -127,6 +127,9 @@ All sections are optional (omitted ones use defaults). See
 - `balances`, `positions`, `working_orders`, `account_number` — shape the account.
 - `order_response.errors` — make `execute_trade` get **rejected** by pre-flight.
 - `raise: { "get_positions": "502 Bad Gateway" }` — simulate an **endpoint outage**.
+- `option_chain` — define exact expirations/strikes/symbols (ISO-date keys) so
+  `get_option_chain` / `get_strategies` return a chain you control; omit it to get
+  a procedurally generated chain.
 - The buying-power figures feed the real risk checks, so you can reproduce buffer
   / deployment-limit rejections deterministically.
 
