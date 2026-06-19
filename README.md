@@ -145,6 +145,51 @@ All sections are optional (omitted ones use defaults). See
 - The buying-power figures feed the real risk checks, so you can reproduce buffer
   / deployment-limit rejections deterministically.
 
+### Example: mid-day MEIC scenario
+
+The shipped [examples/mock_fixture.json](examples/mock_fixture.json) is a ready-made
+scenario modeled on [MEICAgent](https://github.com/joncovington/MEICAgent) — a
+Multiple Entry Iron Condor bot that opens several 0DTE iron condors through the
+day and protects each with a break-even stop. Loading it drops an agent into a
+realistic **mid-session** state:
+
+- **3 open XSP 0DTE iron condors = 12 position legs.** Each condor is a short
+  call spread + short put spread, wing width 5, ~0.15-delta shorts, 1 contract,
+  entered at progressively shifted strikes (as the underlying drifted through the
+  morning).
+- **3 break-even stop-limit working orders**, one per condor, sized near the
+  credit received — mirroring MEIC's "DAY stop-limit at break-even, tightened as
+  the day progresses" behavior.
+- **Realistic balances** — ~$1,200 of derivative buying power used by the three
+  condors, the rest available — so `get_account_info`, `get_positions`,
+  `get_working_orders`, and the deployment-cap check all return believable data.
+- **IV metrics and an option chain** so the agent can evaluate a 4th entry, plus
+  an `order_response` describing that prospective entry's dry-run buying-power
+  effect.
+
+Run it:
+
+```bash
+tastytrade-mcp --mock --mock-fixture examples/mock_fixture.json --enable-live-trading
+```
+
+An agent then sees the exact decision point MEICAgent faces each ~5-minute loop:
+*three positions and three stops are open — add a fourth condor, tighten stops,
+or hold?* — and can rehearse that logic with zero credentials, zero network, and
+no possibility of a real order.
+
+> **Caveat — the dates are illustrative, not live 0DTE.** The position option
+> symbols carry a fixed expiration (`260618`) and the `option_chain` uses a
+> far-future placeholder key (`2099-01-15`). These are **display/structural
+> stand-ins**: position symbols are just strings the tools echo back, and the
+> chain's exact date only matters to `get_strategies`' nearest-DTE selection.
+> For a faithful 0DTE simulation that exercises that selection against *today*,
+> edit the fixture and set the `option_chain` date key (and, if you care about
+> the displayed leg symbols, the `260618` in each position symbol) to the current
+> date. Nothing else in the scenario depends on the date. This fixture validates
+> the **request/response contract and the agent's decision logic** — not market
+> realism, live greeks, or fills.
+
 ## Tools
 
 **Always available (read-only):**
