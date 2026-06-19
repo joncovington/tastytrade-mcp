@@ -21,7 +21,7 @@ def build_server(config: Config | None = None) -> FastMCP:
     if config.mock_mode:
         from .mocks import install_mocks
 
-        install_mocks()
+        install_mocks(config)
         logger.warning(
             "MOCK MODE: serving simulated SDK responses — no real Tastytrade "
             "connection, no credentials used, orders are never submitted."

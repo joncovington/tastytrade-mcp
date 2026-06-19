@@ -128,6 +128,7 @@ def _config(**overrides):
     base = dict(
         sandbox=True,
         mock_mode=False,
+        mock_fixture=None,
         enable_live_trading=True,
         force_dry_run=False,
         buying_power_buffer_pct=0.0,

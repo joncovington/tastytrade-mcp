@@ -8,6 +8,7 @@ def _config():
     return Config(
         sandbox=True,
         mock_mode=False,
+        mock_fixture=None,
         enable_live_trading=False,
         force_dry_run=False,
         buying_power_buffer_pct=0.0,

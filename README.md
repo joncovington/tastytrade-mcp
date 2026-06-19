@@ -111,6 +111,25 @@ Or in your MCP client config:
 talking to the simulator. This is the recommended way for an agent to validate
 its request/response handling before pointing at the sandbox or production.
 
+### Custom mock scenarios
+
+Point `TASTYTRADE_MOCK_FIXTURE` at a JSON file to override the simulated data —
+custom account number, balances, positions, working orders, market metrics, and
+error/outage injection:
+
+```bash
+TASTYTRADE_MOCK=true TASTYTRADE_MOCK_FIXTURE=examples/mock_fixture.json tastytrade-mcp
+```
+
+All sections are optional (omitted ones use defaults). See
+[examples/mock_fixture.json](examples/mock_fixture.json). Highlights:
+
+- `balances`, `positions`, `working_orders`, `account_number` — shape the account.
+- `order_response.errors` — make `execute_trade` get **rejected** by pre-flight.
+- `raise: { "get_positions": "502 Bad Gateway" }` — simulate an **endpoint outage**.
+- The buying-power figures feed the real risk checks, so you can reproduce buffer
+  / deployment-limit rejections deterministically.
+
 ## Tools
 
 **Always available (read-only):**

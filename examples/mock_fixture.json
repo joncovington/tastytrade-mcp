@@ -1,0 +1,44 @@
+{
+  "_comment": "Example fixture for TASTYTRADE_MOCK_FIXTURE. All sections are optional; omitted sections fall back to built-in defaults. Numbers may be strings or numbers.",
+
+  "account_number": "5WX12345",
+  "nickname": "Sim Margin",
+  "account_type_name": "Margin",
+
+  "balances": {
+    "cash_balance": "50000.00",
+    "equity_buying_power": "30000.00",
+    "derivative_buying_power": "30000.00",
+    "used_derivative_buying_power": "20000.00",
+    "net_liquidating_value": "52000.00"
+  },
+
+  "positions": [
+    { "symbol": "XSP   250620C00580000", "quantity": "1", "realized_day_gain": "12.50" },
+    { "symbol": "XSP   250620P00540000", "quantity": "1", "realized_day_gain": "-8.00" }
+  ],
+
+  "working_orders": [
+    { "id": 910001, "status": "Live", "underlying-symbol": "XSP" }
+  ],
+
+  "order_response": {
+    "buying_power_effect": {
+      "current_buying_power": "30000",
+      "new_buying_power": "28800",
+      "change_in_buying_power": "-1200",
+      "effect": "Debit"
+    },
+    "warnings": ["Simulated: verify credit before submitting."],
+    "errors": []
+  },
+
+  "metrics": {
+    "XSP": { "implied_volatility_rank": "0.61", "implied_volatility_percentile": "0.70", "beta": "1.0" }
+  },
+
+  "_error_injection_examples": {
+    "to_reject_an_order": "set order_response.errors to a non-empty list, e.g. [\"Insufficient option level\"]",
+    "to_simulate_an_outage": "set raise.<method> to a message, e.g. {\"raise\": {\"get_positions\": \"502 Bad Gateway\"}}"
+  }
+}

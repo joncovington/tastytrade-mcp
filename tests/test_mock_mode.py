@@ -21,6 +21,7 @@ def _mock_config(**overrides):
     base = dict(
         sandbox=True,
         mock_mode=True,
+        mock_fixture=None,
         enable_live_trading=True,
         force_dry_run=False,
         buying_power_buffer_pct=0.0,
@@ -111,3 +112,95 @@ async def test_no_credentials_required_in_mock_mode():
 
     session = get_session(_mock_config())
     assert getattr(session, "is_mock", False) is True
+
+
+# --------------------------------------------------------------------------- #
+# Fixture-driven scenarios
+# --------------------------------------------------------------------------- #
+import json  # noqa: E402
+
+
+def _write_fixture(tmp_path, data) -> str:
+    path = tmp_path / "fixture.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+@pytest.mark.asyncio
+async def test_fixture_overrides_account_and_balances(tmp_path):
+    fixture = _write_fixture(
+        tmp_path,
+        {
+            "account_number": "5WX12345",
+            "balances": {
+                "derivative_buying_power": "30000",
+                "used_derivative_buying_power": "20000",
+            },
+            "positions": [{"symbol": "XSP P540", "quantity": "2"}],
+        },
+    )
+    mcp = build_server(_mock_config(mock_fixture=fixture))
+
+    info = await _call(mcp, "get_account_info")
+    assert info["account_number"] == "5WX12345"
+    assert info["balances"]["derivative-buying-power"] == "30000"
+
+    positions = await _call(mcp, "get_positions")
+    assert len(positions["positions"]) == 1
+    assert positions["positions"][0]["symbol"] == "XSP P540"
+
+
+@pytest.mark.asyncio
+async def test_fixture_can_reject_an_order(tmp_path):
+    fixture = _write_fixture(
+        tmp_path,
+        {"order_response": {"errors": ["Insufficient option level"]}},
+    )
+    mcp = build_server(_mock_config(mock_fixture=fixture))
+    order = {
+        "order_type": "Limit",
+        "price": -1.0,
+        "legs": [
+            {"instrument_type": "Equity Option", "symbol": "SPY C520", "quantity": 1, "action": "Sell to Open"},
+        ],
+    }
+    res = await _call(mcp, "execute_trade", {"order": order, "dry_run": True})
+    assert res["ok"] is False
+    assert "Insufficient option level" in res["problems"]
+
+
+@pytest.mark.asyncio
+async def test_fixture_can_simulate_endpoint_outage(tmp_path):
+    fixture = _write_fixture(
+        tmp_path, {"raise": {"get_positions": "502 Bad Gateway"}}
+    )
+    mcp = build_server(_mock_config(mock_fixture=fixture))
+    res = await _call(mcp, "get_positions")
+    assert res["ok"] is False
+    assert "502" in res["error"]
+
+
+@pytest.mark.asyncio
+async def test_fixture_account_deploy_limit_uses_fixture_balances(tmp_path):
+    # used 9000 + available 1000 -> capacity 10000; 50% cap = 5000.
+    # Order consumes 1500 (default BPE) -> deployed 9000+1500=10500 > 5000 -> reject.
+    fixture = _write_fixture(
+        tmp_path,
+        {
+            "balances": {
+                "derivative_buying_power": "1000",
+                "used_derivative_buying_power": "9000",
+            }
+        },
+    )
+    mcp = build_server(_mock_config(mock_fixture=fixture, account_deploy_limit_pct=50.0))
+    order = {
+        "order_type": "Limit",
+        "price": -1.0,
+        "legs": [
+            {"instrument_type": "Equity Option", "symbol": "SPY C520", "quantity": 1, "action": "Sell to Open"},
+        ],
+    }
+    res = await _call(mcp, "execute_trade", {"order": order, "dry_run": True})
+    assert res["ok"] is False
+    assert any("deploy limit" in p.lower() for p in res["problems"])
