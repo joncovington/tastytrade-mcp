@@ -206,6 +206,26 @@ async def test_fixture_defines_option_chain(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_shipped_example_fixture_is_mid_day_meic():
+    """The default example fixture models 3 open iron condors (12 legs) plus
+    their break-even stop orders — guard against it drifting."""
+    from pathlib import Path
+
+    fixture = Path(__file__).resolve().parents[1] / "examples" / "mock_fixture.json"
+    assert fixture.exists()
+    mcp = build_server(_mock_config(mock_fixture=str(fixture)))
+
+    positions = await _call(mcp, "get_positions")
+    assert len(positions["positions"]) == 12  # 3 iron condors x 4 legs
+
+    working = await _call(mcp, "get_working_orders")
+    assert len(working["orders"]) == 3  # one stop-limit per condor
+
+    strat = await _call(mcp, "get_strategies", {"symbol": "XSP"})
+    assert strat["ok"]
+
+
+@pytest.mark.asyncio
 async def test_fixture_account_deploy_limit_uses_fixture_balances(tmp_path):
     # used 9000 + available 1000 -> capacity 10000; 50% cap = 5000.
     # Order consumes 1500 (default BPE) -> deployed 9000+1500=10500 > 5000 -> reject.
