@@ -30,7 +30,12 @@ class MemoryKeyring(KeyringBackend):
 
 
 @pytest.fixture(autouse=True)
-def memory_keyring():
+def memory_keyring(request):
+    # Live integration tests must use the real OS keyring (stored credentials),
+    # so skip the in-memory swap for anything marked @pytest.mark.live.
+    if request.node.get_closest_marker("live"):
+        yield None
+        return
     backend = MemoryKeyring()
     previous = keyring.get_keyring()
     keyring.set_keyring(backend)

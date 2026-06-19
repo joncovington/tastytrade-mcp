@@ -40,3 +40,6 @@ packages = ["src/tastytrade_mcp"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "live: integration tests that hit the live Tastytrade sandbox using stored credentials (opt-in via RUN_LIVE_SANDBOX=1)",
+]

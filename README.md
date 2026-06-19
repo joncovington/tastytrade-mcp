@@ -135,8 +135,23 @@ figures (`account_deployed_current`, `account_deployed_after`,
 
 ```bash
 pip install -e .[dev]
-pytest
+pytest                       # unit tests (SDK mocked, no network)
 ```
+
+### Live sandbox integration tests
+
+A separate, opt-in suite hits the real Tastytrade **sandbox** using your stored
+credentials to confirm the SDK + OAuth + API contract works end-to-end. It is
+skipped by default and never submits a real order (the test server runs with
+`force_dry_run=true`). To run it:
+
+```bash
+tastytrade-mcp secrets set --sandbox     # if not already stored
+RUN_LIVE_SANDBOX=1 pytest -m live -v
+```
+
+Tests that depend on cert endpoints which are intermittently unavailable (e.g.
+`/market-metrics`) skip themselves on a 5xx rather than failing.
 
 ## Disclaimer
 
