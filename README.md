@@ -51,6 +51,7 @@ Copy `.env.example` to `.env` and adjust. Key flags:
 | Variable | Default | Meaning |
 |---|---|---|
 | `TASTYTRADE_SANDBOX` | `false` | Use the sandbox/cert environment |
+| `TASTYTRADE_MOCK` | `false` | Serve simulated SDK responses (no creds, no network) |
 | `ENABLE_LIVE_TRADING` | `false` | Register order-placing tools |
 | `FORCE_DRY_RUN` | `false` | Force all orders to dry-run (propose-only mode) |
 | `BUYING_POWER_BUFFER_PCT` | `0` | Percent of buying power always kept in reserve (per order) |
@@ -80,6 +81,35 @@ Claude Desktop / Claude Code MCP config:
   }
 }
 ```
+
+## Mock mode (test without credentials)
+
+Run the server with `TASTYTRADE_MOCK=true` to serve **simulated SDK responses** —
+no credentials, no network, orders never submitted. An agent (or you) can
+exercise every tool against deterministic data: connection checks, account and
+market queries, strategy building, and dry-run order placement.
+
+```bash
+TASTYTRADE_MOCK=true ENABLE_LIVE_TRADING=true tastytrade-mcp
+```
+
+Or in your MCP client config:
+
+```jsonc
+{
+  "servers": {
+    "tastytrade-mock": {
+      "type": "stdio",
+      "command": "tastytrade-mcp",
+      "env": { "TASTYTRADE_MOCK": "true", "ENABLE_LIVE_TRADING": "true" }
+    }
+  }
+}
+```
+
+`get_connection_status` reports `"mock_mode": true` so an agent can tell it is
+talking to the simulator. This is the recommended way for an agent to validate
+its request/response handling before pointing at the sandbox or production.
 
 ## Tools
 

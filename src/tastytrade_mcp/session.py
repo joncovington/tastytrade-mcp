@@ -56,6 +56,10 @@ def get_session(config: Config | None = None) -> Session:
     """
     global _session, _session_sandbox
     config = config or get_config()
+    if config.mock_mode:
+        from .mocks import MOCK_SESSION
+
+        return MOCK_SESSION
     with _lock:
         if _session is None or _session_sandbox != config.sandbox:
             _session = _build_session(config)

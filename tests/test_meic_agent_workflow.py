@@ -127,6 +127,7 @@ def _fake_chain():
 def _config(**overrides):
     base = dict(
         sandbox=True,
+        mock_mode=False,
         enable_live_trading=True,
         force_dry_run=False,
         buying_power_buffer_pct=0.0,

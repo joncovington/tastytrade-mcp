@@ -27,10 +27,10 @@ def register(mcp, config: Config) -> None:
         status: dict[str, Any] = {
             "ok": True,
             "environment": "sandbox" if config.sandbox else "production",
+            "mock_mode": config.mock_mode,
             "live_trading_enabled": config.enable_live_trading,
-            "credentials_present": credentials.secrets_present(
-                sandbox=config.sandbox
-            ),
+            "credentials_present": config.mock_mode
+            or credentials.secrets_present(sandbox=config.sandbox),
         }
         if not status["credentials_present"]:
             status["ok"] = False

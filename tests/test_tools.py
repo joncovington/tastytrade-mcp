@@ -7,6 +7,7 @@ from tastytrade_mcp.server import build_server
 def _config(live: bool):
     return Config(
         sandbox=True,
+        mock_mode=False,
         enable_live_trading=live,
         force_dry_run=False,
         buying_power_buffer_pct=0.0,

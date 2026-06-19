@@ -26,6 +26,7 @@ class Config:
     """Resolved server configuration."""
 
     sandbox: bool
+    mock_mode: bool
     enable_live_trading: bool
     force_dry_run: bool
     buying_power_buffer_pct: float
@@ -42,6 +43,7 @@ class Config:
     def from_env(cls) -> "Config":
         return cls(
             sandbox=_as_bool(os.getenv("TASTYTRADE_SANDBOX"), default=False),
+            mock_mode=_as_bool(os.getenv("TASTYTRADE_MOCK"), default=False),
             enable_live_trading=_as_bool(
                 os.getenv("ENABLE_LIVE_TRADING"), default=False
             ),
