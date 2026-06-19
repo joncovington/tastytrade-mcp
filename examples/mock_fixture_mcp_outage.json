@@ -1,0 +1,13 @@
+{
+  "_comment": "Hard limit 7 (MCP/brokerage outage). The account-listing call that get_connection_status relies on fails, so the connection check returns {ok:false, connected:false, error:...}. The agent should treat this as a hard stop: log the failure and HALT the loop iteration without attempting any trades. Trigger is the 'raise' map keyed on get_accounts.",
+
+  "account_number": "5WX12345",
+  "nickname": "MEIC Sim - MCP outage",
+
+  "raise": {
+    "get_accounts": "503 Service Unavailable: tastytrade API unreachable",
+    "get_balances": "503 Service Unavailable: tastytrade API unreachable",
+    "get_positions": "503 Service Unavailable: tastytrade API unreachable",
+    "get_live_orders": "503 Service Unavailable: tastytrade API unreachable"
+  }
+}

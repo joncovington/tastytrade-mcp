@@ -214,8 +214,14 @@ def install_mocks(config=None, setter=setattr) -> MockAccount:
 
     fixture = _load_fixture(getattr(config, "mock_fixture", None))
     account = MockAccount(fixture)
+    raise_map = fixture.get("raise", {})
 
     async def fake_get(_session, number=None):
+        # Simulate an MCP/brokerage outage at the account-listing level, which
+        # is what get_connection_status exercises.
+        message = raise_map.get("get_accounts")
+        if message:
+            raise RuntimeError(str(message))
         return account if number else [account]
 
     metrics_override = fixture.get("metrics", {})

@@ -190,6 +190,24 @@ no possibility of a real order.
 > the **request/response contract and the agent's decision logic** — not market
 > realism, live greeks, or fills.
 
+### Scenario variants
+
+Alongside the default, four variant fixtures reproduce specific MEIC decision and
+limit branches so an agent can be tested against each in isolation:
+
+| Fixture | Agent behavior under test |
+|---|---|
+| [`mock_fixture_stop_filled.json`](examples/mock_fixture_stop_filled.json) | **Step 4a** — a stop is missing from working orders (it filled), triggering post-stop evaluation. 12 legs on book, only 2 of 3 stops live. |
+| [`mock_fixture_stale_pending.json`](examples/mock_fixture_stale_pending.json) | **Step 4b** — a pending entry older than 10 min triggers cancellation. Includes a `Received` order with a far-past `received_at`. |
+| [`mock_fixture_bp_rejection.json`](examples/mock_fixture_bp_rejection.json) | **Step 6** — `execute_trade` dry-run returns a buying-power rejection (projected BP goes negative); the agent should skip the entry. |
+| [`mock_fixture_mcp_outage.json`](examples/mock_fixture_mcp_outage.json) | **Hard limit 7** — `get_connection_status` fails (account call raises); the agent should log and halt. |
+
+```bash
+tastytrade-mcp --mock --mock-fixture examples/mock_fixture_stop_filled.json --enable-live-trading
+```
+
+The same date caveat above applies to every variant.
+
 ## Tools
 
 **Always available (read-only):**

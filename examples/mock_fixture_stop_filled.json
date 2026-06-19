@@ -1,0 +1,40 @@
+{
+  "_comment": "Step 4a (post-stop evaluation). A mid-day MEIC state where IC #1's break-even stop has FILLED: its stop-limit is gone from working_orders (only 2 of 3 remain) and IC #1's legs show a realized loss. The agent should detect a condor with no corresponding working stop and run post-stop management (e.g. close/buy-back the remaining structure or stand down). Dates are illustrative placeholders; see README caveat.",
+
+  "account_number": "5WX12345",
+  "nickname": "MEIC Sim - stop filled",
+
+  "balances": {
+    "cash_balance": "100000.00",
+    "net_liquidating_value": "99810.00",
+    "equity_buying_power": "98800.00",
+    "derivative_buying_power": "98800.00",
+    "used_derivative_buying_power": "1200.00"
+  },
+
+  "positions": [
+    { "symbol": "XSP   260618C00585000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Short", "average_open_price": "1.05", "realized_day_gain": "-190.00" },
+    { "symbol": "XSP   260618C00590000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Long",  "average_open_price": "0.45", "realized_day_gain": "0.00" },
+    { "symbol": "XSP   260618P00575000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Short", "average_open_price": "1.00", "realized_day_gain": "0.00" },
+    { "symbol": "XSP   260618P00570000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Long",  "average_open_price": "0.40", "realized_day_gain": "0.00" },
+
+    { "symbol": "XSP   260618C00586000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Short", "average_open_price": "0.95", "realized_day_gain": "0.00" },
+    { "symbol": "XSP   260618C00591000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Long",  "average_open_price": "0.40", "realized_day_gain": "0.00" },
+    { "symbol": "XSP   260618P00574000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Short", "average_open_price": "0.90", "realized_day_gain": "0.00" },
+    { "symbol": "XSP   260618P00569000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Long",  "average_open_price": "0.35", "realized_day_gain": "0.00" },
+
+    { "symbol": "XSP   260618C00588000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Short", "average_open_price": "1.10", "realized_day_gain": "0.00" },
+    { "symbol": "XSP   260618C00593000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Long",  "average_open_price": "0.50", "realized_day_gain": "0.00" },
+    { "symbol": "XSP   260618P00576000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Short", "average_open_price": "1.05", "realized_day_gain": "0.00" },
+    { "symbol": "XSP   260618P00571000", "instrument_type": "Equity Option", "quantity": "1", "quantity_direction": "Long",  "average_open_price": "0.45", "realized_day_gain": "0.00" }
+  ],
+
+  "working_orders": [
+    { "id": 910002, "status": "Live", "underlying_symbol": "XSP", "order_type": "Stop Limit", "time_in_force": "Day", "stop_trigger": "1.10", "price": "1.20", "_note": "break-even stop on IC #2 still live" },
+    { "id": 910003, "status": "Live", "underlying_symbol": "XSP", "order_type": "Stop Limit", "time_in_force": "Day", "stop_trigger": "1.25", "price": "1.35", "_note": "break-even stop on IC #3 still live" }
+  ],
+
+  "metrics": {
+    "XSP": { "implied_volatility_rank": "0.41", "implied_volatility_percentile": "0.58", "beta": "1.0" }
+  }
+}
