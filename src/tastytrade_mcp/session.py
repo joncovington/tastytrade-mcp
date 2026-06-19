@@ -69,3 +69,29 @@ def reset_session() -> None:
     with _lock:
         _session = None
         _session_sandbox = None
+
+
+def close_session() -> None:
+    """Best-effort release of the cached session's HTTP resources on shutdown.
+
+    The OAuth refresh token is long-lived and intentionally NOT invalidated here
+    — we only close any open httpx clients so a Ctrl-C exits cleanly without
+    leaking sockets or emitting unclosed-client warnings.
+    """
+    global _session, _session_sandbox
+    with _lock:
+        session = _session
+        _session = None
+        _session_sandbox = None
+
+    if session is None:
+        return
+
+    for attr in ("sync_client", "_sync_client", "client", "_client"):
+        client = getattr(session, attr, None)
+        close = getattr(client, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:  # noqa: BLE001 - best effort during shutdown
+                logger.debug("Error closing client %s during shutdown", attr)

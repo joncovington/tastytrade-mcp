@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import signal
 
 from mcp.server.fastmcp import FastMCP
 
 from .config import Config, get_config
 from .logging_utils import configure_logging
+from .session import close_session
 from .tools import register_all
 
 logger = logging.getLogger(__name__)
@@ -43,12 +45,29 @@ def run(transport: str = "stdio", config: Config | None = None) -> None:
 
     mcp = build_server(config)
 
-    if transport == "http":
-        from .http_app import run_http
+    # Translate SIGTERM into the same KeyboardInterrupt path as Ctrl-C so both
+    # trigger a single graceful shutdown. Best-effort: signal handlers can only
+    # be installed from the main thread.
+    def _handle_term(signum, _frame):  # pragma: no cover - signal plumbing
+        raise KeyboardInterrupt()
 
-        run_http(mcp, config)
-    else:
-        mcp.run()
+    try:
+        signal.signal(signal.SIGTERM, _handle_term)
+    except (ValueError, OSError):  # not main thread / unsupported platform
+        pass
+
+    try:
+        if transport == "http":
+            from .http_app import run_http
+
+            run_http(mcp, config)
+        else:
+            mcp.run()
+    except KeyboardInterrupt:
+        logger.info("Received interrupt (Ctrl-C); shutting down gracefully.")
+    finally:
+        close_session()
+        logger.info("tastytrade-mcp stopped.")
 
 
 if __name__ == "__main__":
