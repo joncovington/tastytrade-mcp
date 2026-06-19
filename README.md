@@ -93,7 +93,19 @@ market queries, strategy building, and dry-run order placement.
 TASTYTRADE_MOCK=true ENABLE_LIVE_TRADING=true tastytrade-mcp
 ```
 
-Or in your MCP client config:
+Equivalent startup **flags** (handy when an agent launches the server itself):
+
+```bash
+tastytrade-mcp --mock --enable-live-trading
+tastytrade-mcp --mock --mock-fixture examples/mock_fixture.json --enable-live-trading
+```
+
+Flags override the matching env vars (`--mock` → `TASTYTRADE_MOCK`,
+`--mock-fixture` → `TASTYTRADE_MOCK_FIXTURE`, `--enable-live-trading` →
+`ENABLE_LIVE_TRADING`, `--sandbox` → `TASTYTRADE_SANDBOX`); `--mock-fixture`
+implies `--mock`.
+
+Or in your MCP client config — either via `env` or `args`:
 
 ```jsonc
 {
@@ -101,7 +113,7 @@ Or in your MCP client config:
     "tastytrade-mock": {
       "type": "stdio",
       "command": "tastytrade-mcp",
-      "env": { "TASTYTRADE_MOCK": "true", "ENABLE_LIVE_TRADING": "true" }
+      "args": ["--mock", "--enable-live-trading"]
     }
   }
 }
