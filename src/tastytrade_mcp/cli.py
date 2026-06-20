@@ -3,8 +3,7 @@
 Usage:
     tastytrade-mcp                      # run the MCP server over stdio (default)
     tastytrade-mcp --transport http     # run over HTTP (CORS + rate limited)
-    tastytrade-mcp --mock               # run with simulated SDK data (no creds)
-    tastytrade-mcp --mock --mock-fixture scenario.json --enable-live-trading
+    tastytrade-mcp --sandbox --enable-live-trading
     tastytrade-mcp secrets set          # store OAuth credentials in the keyring
     tastytrade-mcp secrets status       # show which credentials are stored
     tastytrade-mcp secrets delete       # remove stored credentials
@@ -97,10 +96,6 @@ def _cmd_secrets_delete(args: argparse.Namespace) -> int:
 def _cmd_serve(args: argparse.Namespace) -> int:
     # Startup flags override the corresponding env vars. Config is env-driven, so
     # we set the env before importing/running the server (single source of truth).
-    if args.mock or args.mock_fixture:
-        os.environ["TASTYTRADE_MOCK"] = "true"
-    if args.mock_fixture:
-        os.environ["TASTYTRADE_MOCK_FIXTURE"] = args.mock_fixture
     if args.enable_live_trading:
         os.environ["ENABLE_LIVE_TRADING"] = "true"
     if args.sandbox:
@@ -123,16 +118,6 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["stdio", "http"],
         default="stdio",
         help="MCP transport to run the server with (default: stdio).",
-    )
-    parser.add_argument(
-        "--mock",
-        action="store_true",
-        help="Run in mock mode: simulated SDK data, no credentials or network.",
-    )
-    parser.add_argument(
-        "--mock-fixture",
-        metavar="PATH",
-        help="JSON fixture customizing mock data (implies --mock).",
     )
     parser.add_argument(
         "--enable-live-trading",

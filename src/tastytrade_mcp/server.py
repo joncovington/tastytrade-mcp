@@ -18,14 +18,6 @@ logger = logging.getLogger(__name__)
 def build_server(config: Config | None = None) -> FastMCP:
     """Construct the FastMCP server with all tools registered."""
     config = config or get_config()
-    if config.mock_mode:
-        from .mocks import install_mocks
-
-        install_mocks(config)
-        logger.warning(
-            "MOCK MODE: serving simulated SDK responses — no real Tastytrade "
-            "connection, no credentials used, orders are never submitted."
-        )
     mcp = FastMCP(
         "tastytrade-mcp",
         instructions=(
