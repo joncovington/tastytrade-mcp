@@ -25,12 +25,37 @@ pip install -e .          # or: pip install -e .[dev] for tests
 
 ## 1. Create a Tastytrade OAuth application
 
+### Production
+
 1. In the Tastytrade web app, open **Manage → My Profile → API → OAuth Applications**.
 2. Create an application, select the scopes you need (read + trading), and add
    `http://localhost:8000` as a valid redirect/callback URI.
 3. Save the **client secret** (shown once).
-4. Create a **grant** to obtain a long-lived **refresh token**. For sandbox you
-   can instead run `from tastytrade.oauth import login; login(is_test=True)`.
+4. Create a **grant** to obtain a long-lived **refresh token**.
+
+### Sandbox (recommended first)
+
+The Tastytrade sandbox ([developer.tastytrade.com/sandbox/](https://developer.tastytrade.com/sandbox/))
+is a full copy of the platform against which you can trade freely without real money.
+It resets every 24 hours (trades/positions cleared; account and credentials preserved).
+
+- **API base URL:** `api.cert.tastyworks.com`
+- **Market data:** quotes are delayed 15 minutes in the sandbox
+- **Register** a sandbox account at the developer portal if you don't have one
+
+Once you have a sandbox account, obtain OAuth credentials the same way as production
+(OAuth Applications in the sandbox web app), then store them separately:
+
+```bash
+tastytrade-mcp secrets set --sandbox
+```
+
+Or use the SDK's built-in sandbox login helper to get a refresh token interactively:
+
+```python
+from tastytrade.oauth import login
+login(is_test=True)   # opens browser, prints refresh token
+```
 
 > Never paste secrets into code, `.env`, or version control.
 
