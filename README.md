@@ -92,6 +92,33 @@ Claude Desktop / Claude Code MCP config:
 `execute_trade`, `adjust_order`, `close_position`, `manage_watchlist`.
 Order tools default to `dry_run=true` (validate without submitting).
 
+### Per-strike greeks on the option chain
+
+`get_option_chain` returns instrument fields per strike by default. Pass
+`include_greeks=true` to merge live **`delta`, `gamma`, `theta`, and `iv`**
+(annualized implied volatility) into each strike — useful for verifying strike
+placement, detecting put/call skew from per-strike IV, and assessing 0DTE gamma
+risk:
+
+```jsonc
+get_option_chain({
+  "symbol": "XSP",
+  "expiration": "2026-06-20",   // recommended with greeks (bounds the fetch)
+  "include_greeks": true,
+  "greeks_timeout": 6.0
+})
+// -> chain[expiration] = [
+//   { "strike_price": "580", "option_type": "Put", "symbol": "...",
+//     "streamer_symbol": ".XSP...", "delta": -0.18, "gamma": 0.042,
+//     "theta": -0.95, "iv": 0.187 }, ... ]
+```
+
+Greeks come from the **DXLink streaming feed** (not the chain endpoint), so this
+adds latency and is opt-in. With `include_greeks` and no `expiration`, the tool
+defaults to the **nearest** expiration to bound the subscription. If the feed is
+slow or unavailable, the chain is still returned and `greeks_complete` /
+`greeks_received` report coverage rather than failing the call.
+
 ### Order safety layers
 
 A live order requires **all** of the following, so it cannot happen by accident:
