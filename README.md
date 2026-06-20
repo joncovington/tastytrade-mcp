@@ -44,6 +44,25 @@ tastytrade-mcp secrets status --sandbox
 You'll be prompted (hidden input) for the client secret, refresh token, and an
 optional default account number.
 
+The `secrets status` command also shows which keyring backend is active — useful
+for diagnosing credential issues on a new machine.
+
+### Headless Linux (servers, Docker, CI)
+
+Desktop Linux uses GNOME Keyring or KWallet. On headless systems (no desktop
+daemon) the native backend is unavailable. Install the encrypted-file fallback:
+
+```bash
+pip install 'tastytrade-mcp[headless]'
+export PYTHON_KEYRING_BACKEND=keyrings.alt.file.EncryptedKeyring
+tastytrade-mcp secrets set --sandbox
+```
+
+`EncryptedKeyring` stores secrets in `~/.local/share/python_keyring/cryptedpass.cfg`
+encrypted with a master password you set on first use. Keep this file out of
+version control. The `PYTHON_KEYRING_BACKEND` variable selects the backend only;
+it is not a secret.
+
 ## 3. Configure
 
 Copy `.env.example` to `.env` and adjust. Key flags:

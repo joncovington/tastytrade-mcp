@@ -30,6 +30,9 @@ dev = [
     "pytest-cov>=5",
     "httpx>=0.27",
 ]
+# Encrypted file-based keyring backend for headless Linux (servers, Docker, CI).
+# After installing, set: PYTHON_KEYRING_BACKEND=keyrings.alt.file.EncryptedKeyring
+headless = ["keyrings.alt>=5"]
 
 [project.scripts]
 tastytrade-mcp = "tastytrade_mcp.cli:main"

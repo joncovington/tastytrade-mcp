@@ -22,6 +22,7 @@ from rich.console import Console
 
 from . import credentials
 from .config import get_config
+from .credentials import CredentialError
 
 console = Console()
 
@@ -38,7 +39,10 @@ def _env_flag(args: argparse.Namespace) -> bool:
 def _cmd_secrets_set(args: argparse.Namespace) -> int:
     sandbox = _env_flag(args)
     env = "sandbox" if sandbox else "production"
-    console.print(f"[bold]Storing {env} Tastytrade credentials in the keyring.[/]")
+    console.print(
+        f"[bold]Storing {env} Tastytrade credentials in the keyring.[/] "
+        f"([dim]backend: {credentials.get_backend_name()}[/])"
+    )
     console.print("Leave a field blank to keep the existing value.\n")
 
     prompts = {
@@ -46,18 +50,22 @@ def _cmd_secrets_set(args: argparse.Namespace) -> int:
         credentials.REFRESH_TOKEN: "OAuth refresh token",
         credentials.ACCOUNT_NUMBER: "Default account number (optional)",
     }
-    for key, label in prompts.items():
-        secret = key != credentials.ACCOUNT_NUMBER
-        value = (
-            getpass.getpass(f"{label}: ")
-            if secret
-            else input(f"{label}: ")
-        ).strip()
-        if value:
-            credentials.set_secret(key, value, sandbox=sandbox)
-            console.print(f"  [green]stored[/] {key}")
-        else:
-            console.print(f"  [dim]skipped[/] {key}")
+    try:
+        for key, label in prompts.items():
+            secret = key != credentials.ACCOUNT_NUMBER
+            value = (
+                getpass.getpass(f"{label}: ")
+                if secret
+                else input(f"{label}: ")
+            ).strip()
+            if value:
+                credentials.set_secret(key, value, sandbox=sandbox)
+                console.print(f"  [green]stored[/] {key}")
+            else:
+                console.print(f"  [dim]skipped[/] {key}")
+    except CredentialError as exc:
+        console.print(f"\n[red]Keyring error:[/] {exc}")
+        return 1
 
     if credentials.secrets_present(sandbox=sandbox):
         console.print(f"\n[green]OK[/] {env} credentials are ready.")
@@ -70,22 +78,33 @@ def _cmd_secrets_set(args: argparse.Namespace) -> int:
 def _cmd_secrets_status(args: argparse.Namespace) -> int:
     sandbox = _env_flag(args)
     env = "sandbox" if sandbox else "production"
-    console.print(f"[bold]{env} credentials[/]")
-    for key in credentials.ALL_SECRETS:
-        present = credentials.get_secret(key, sandbox=sandbox) is not None
-        mark = "[green]set[/]" if present else "[red]missing[/]"
-        console.print(f"  {key}: {mark}")
+    console.print(
+        f"[bold]{env} credentials[/] "
+        f"([dim]backend: {credentials.get_backend_name()}[/])"
+    )
+    try:
+        for key in credentials.ALL_SECRETS:
+            present = credentials.get_secret(key, sandbox=sandbox) is not None
+            mark = "[green]set[/]" if present else "[red]missing[/]"
+            console.print(f"  {key}: {mark}")
+    except CredentialError as exc:
+        console.print(f"  [red]Keyring error:[/] {exc}")
+        return 1
     return 0 if credentials.secrets_present(sandbox=sandbox) else 1
 
 
 def _cmd_secrets_delete(args: argparse.Namespace) -> int:
     sandbox = _env_flag(args)
     env = "sandbox" if sandbox else "production"
-    removed = [
-        key
-        for key in credentials.ALL_SECRETS
-        if credentials.delete_secret(key, sandbox=sandbox)
-    ]
+    try:
+        removed = [
+            key
+            for key in credentials.ALL_SECRETS
+            if credentials.delete_secret(key, sandbox=sandbox)
+        ]
+    except CredentialError as exc:
+        console.print(f"[red]Keyring error:[/] {exc}")
+        return 1
     if removed:
         console.print(f"[green]Removed {env} secrets:[/] {', '.join(removed)}")
     else:
