@@ -105,6 +105,8 @@ get_option_chain({
   "symbol": "XSP",
   "expiration": "2026-06-20",   // recommended with greeks (bounds the fetch)
   "include_greeks": true,
+  "strike_count": 15,           // ATM window: 15 strikes each side of the money
+  "around_price": 581.40,       // center on the underlying's last price
   "greeks_timeout": 6.0
 })
 // -> chain[expiration] = [
@@ -115,9 +117,11 @@ get_option_chain({
 
 Greeks come from the **DXLink streaming feed** (not the chain endpoint), so this
 adds latency and is opt-in. With `include_greeks` and no `expiration`, the tool
-defaults to the **nearest** expiration to bound the subscription. If the feed is
-slow or unavailable, the chain is still returned and `greeks_complete` /
-`greeks_received` report coverage rather than failing the call.
+defaults to the **nearest** expiration to bound the subscription. Use
+`strike_count` (+ `around_price`) to fetch only an ATM window of strikes —
+strongly recommended for greeks, since it keeps the subscription small and fast.
+If the feed is slow or unavailable, the chain is still returned and
+`greeks_complete` / `greeks_received` report coverage rather than failing.
 
 ### Order safety layers
 

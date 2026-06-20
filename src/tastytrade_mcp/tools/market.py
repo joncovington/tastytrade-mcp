@@ -70,6 +70,33 @@ def _nearest_expiration(expirations: list[date]) -> date:
     return min(expirations, key=lambda e: abs((e - today).days))
 
 
+def _strike(option: Any) -> float | None:
+    try:
+        return float(option.strike_price)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return None
+
+
+def _atm_window(
+    options: list[Any], strike_count: int, around_price: float | None
+) -> list[Any]:
+    """Keep only the strikes within ``strike_count`` of the money.
+
+    The center is ``around_price`` when given (pass the underlying's last price),
+    otherwise the median strike — a reasonable ATM proxy for a centered chain.
+    Both calls and puts at each kept strike are retained.
+    """
+    strikes = sorted({s for s in (_strike(o) for o in options) if s is not None})
+    if not strikes:
+        return options
+    center = around_price if around_price is not None else strikes[len(strikes) // 2]
+    nearest = min(range(len(strikes)), key=lambda i: abs(strikes[i] - center))
+    lo = max(0, nearest - strike_count)
+    hi = min(len(strikes), nearest + strike_count + 1)
+    keep = set(strikes[lo:hi])
+    return [o for o in options if _strike(o) in keep]
+
+
 def register(mcp, config: Config) -> None:
     @mcp.tool()
     async def get_market_overview(symbols: list[str]) -> dict[str, Any]:
@@ -94,6 +121,8 @@ def register(mcp, config: Config) -> None:
         symbol: str,
         expiration: str | None = None,
         include_greeks: bool = False,
+        strike_count: int | None = None,
+        around_price: float | None = None,
         greeks_timeout: float = 6.0,
     ) -> dict[str, Any]:
         """Retrieve the option chain for an underlying symbol.
@@ -111,6 +140,12 @@ def register(mcp, config: Config) -> None:
                 each strike. Adds latency; greeks come from the DXLink feed, not
                 the chain endpoint. If the feed is unavailable, the chain is
                 still returned (without greeks) and ``greeks_complete`` is false.
+            strike_count: Keep only this many strikes on each side of the money
+                (an ATM window). Strongly recommended with ``include_greeks`` to
+                keep the greeks subscription small and fast.
+            around_price: Underlying price to center the ATM window on (pass the
+                last price from get_market_overview). Defaults to the median
+                strike when omitted.
             greeks_timeout: Seconds to wait for greeks before returning partial.
         """
         try:
@@ -138,8 +173,17 @@ def register(mcp, config: Config) -> None:
             else:
                 selected = expirations
 
+            # Optionally trim each expiration to an ATM window of strikes.
+            options_by_exp = {exp: list(chain[exp]) for exp in selected}
+            if strike_count is not None:
+                options_by_exp = {
+                    exp: _atm_window(opts, strike_count, around_price)
+                    for exp, opts in options_by_exp.items()
+                }
+
             serialized = {
-                str(exp): [_entry(o) for o in chain[exp]] for exp in selected
+                str(exp): [_entry(o) for o in opts]
+                for exp, opts in options_by_exp.items()
             }
 
             result: dict[str, Any] = {
@@ -151,8 +195,8 @@ def register(mcp, config: Config) -> None:
             if include_greeks:
                 streamer_symbols = [
                     o.streamer_symbol
-                    for exp in selected
-                    for o in chain[exp]
+                    for opts in options_by_exp.values()
+                    for o in opts
                     if getattr(o, "streamer_symbol", None)
                 ]
                 greeks = await _collect_greeks(

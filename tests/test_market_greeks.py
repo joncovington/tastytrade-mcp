@@ -48,6 +48,15 @@ def _chain():
     }
 
 
+def _wide_chain():
+    """A single expiration with strikes 560..600 (calls and puts)."""
+    opts = []
+    for strike in range(560, 605, 5):
+        opts.append(GOption(strike, "Call", f".C{strike}"))
+        opts.append(GOption(strike, "Put", f".P{strike}"))
+    return {NEAR: opts}
+
+
 def _greek(sym):
     return SimpleNamespace(
         event_symbol=sym,
@@ -132,3 +141,51 @@ async def test_unknown_expiration_lists_available(make_config, call_tool, patche
     )
     assert res["ok"] is False
     assert str(NEAR) in res["available_expirations"]
+
+
+async def test_atm_window_limits_strikes(make_config, call_tool, monkeypatch):
+    chain = _wide_chain()
+
+    async def fake_chain(_session, _symbol):
+        return chain
+
+    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    mcp = build_server(make_config())
+    # Center on 580 with 2 strikes each side -> strikes 570,575,580,585,590.
+    res = await call_tool(
+        mcp,
+        "get_option_chain",
+        {"symbol": "XSP", "strike_count": 2, "around_price": 580},
+    )
+    assert res["ok"]
+    strikes = {float(e["strike_price"]) for e in res["chain"][str(NEAR)]}
+    assert strikes == {570.0, 575.0, 580.0, 585.0, 590.0}
+
+
+async def test_atm_window_bounds_greeks_subscription(make_config, call_tool, monkeypatch):
+    chain = _wide_chain()
+    captured = {}
+
+    async def fake_chain(_session, _symbol):
+        return chain
+
+    async def fake_collect(_session, symbols, _timeout):
+        captured["symbols"] = symbols
+        return {s: _greek(s) for s in symbols}
+
+    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    monkeypatch.setattr(market, "_collect_greeks", fake_collect)
+    mcp = build_server(make_config())
+    res = await call_tool(
+        mcp,
+        "get_option_chain",
+        {
+            "symbol": "XSP",
+            "include_greeks": True,
+            "strike_count": 1,
+            "around_price": 580,
+        },
+    )
+    assert res["ok"] and res["greeks_complete"] is True
+    # 3 strikes (575/580/585) x 2 types = 6 streamer symbols subscribed.
+    assert len(captured["symbols"]) == 6
