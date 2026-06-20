@@ -121,7 +121,7 @@ def register(mcp, config: Config) -> None:
         symbol: str,
         expiration: str | None = None,
         include_greeks: bool = False,
-        strike_count: int | None = None,
+        strike_count: int | None = 15,
         around_price: float | None = None,
         greeks_timeout: float = 6.0,
     ) -> dict[str, Any]:
@@ -141,8 +141,9 @@ def register(mcp, config: Config) -> None:
                 the chain endpoint. If the feed is unavailable, the chain is
                 still returned (without greeks) and ``greeks_complete`` is false.
             strike_count: Keep only this many strikes on each side of the money
-                (an ATM window). Strongly recommended with ``include_greeks`` to
-                keep the greeks subscription small and fast.
+                (an ATM window). Defaults to 15, which keeps the greeks
+                subscription small and fast. Pass null/None to return the full
+                chain for the selected expiration(s).
             around_price: Underlying price to center the ATM window on (pass the
                 last price from get_market_overview). Defaults to the median
                 strike when omitted.

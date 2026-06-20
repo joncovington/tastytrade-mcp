@@ -143,6 +143,42 @@ async def test_unknown_expiration_lists_available(make_config, call_tool, patche
     assert str(NEAR) in res["available_expirations"]
 
 
+async def test_default_strike_count_is_15(make_config, call_tool, monkeypatch):
+    # 41 strikes (400..600 step 5); default window of 15 each side -> 31 strikes.
+    opts = []
+    for strike in range(400, 605, 5):
+        opts.append(GOption(strike, "Call", f".C{strike}"))
+        opts.append(GOption(strike, "Put", f".P{strike}"))
+    chain = {NEAR: opts}
+
+    async def fake_chain(_session, _symbol):
+        return chain
+
+    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    mcp = build_server(make_config())
+    res = await call_tool(mcp, "get_option_chain", {"symbol": "XSP"})
+    strikes = {float(e["strike_price"]) for e in res["chain"][str(NEAR)]}
+    assert len(strikes) == 31  # default 15 each side of the median
+
+
+async def test_full_chain_when_strike_count_none(make_config, call_tool, monkeypatch):
+    opts = []
+    for strike in range(400, 605, 5):
+        opts.append(GOption(strike, "Call", f".C{strike}"))
+    chain = {NEAR: opts}
+
+    async def fake_chain(_session, _symbol):
+        return chain
+
+    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    mcp = build_server(make_config())
+    res = await call_tool(
+        mcp, "get_option_chain", {"symbol": "XSP", "strike_count": None}
+    )
+    strikes = {float(e["strike_price"]) for e in res["chain"][str(NEAR)]}
+    assert len(strikes) == 41  # no window -> full chain
+
+
 async def test_atm_window_limits_strikes(make_config, call_tool, monkeypatch):
     chain = _wide_chain()
 
