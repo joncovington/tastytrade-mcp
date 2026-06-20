@@ -7,11 +7,7 @@ inspect accounts/positions/orders, and (optionally) place and manage trades.
 - **OAuth2** authentication via the official [`tastytrade`](https://github.com/tastyware/tastytrade)
   Python SDK (session tokens auto-refresh; refresh tokens are long-lived).
 - **Credentials stored in the OS keyring** (Windows Credential Manager / DPAPI,
-  macOS Keychain, Linux Secret Service) — never in files, never in env vars,
-  never logged. This mirrors the [meic-trader](https://github.com/joncovington/meic-trader)
-  pattern.
-- **Tool surface modeled on**
-  [TastyScanner-MCP-Server](https://github.com/technet365/TastyScanner-MCP-Server).
+  macOS Keychain, Linux Secret Service) — never in files, never in env vars, never logged.
 - **Live trading is gated** behind `ENABLE_LIVE_TRADING` — disabled by default so
   an agent cannot place real orders without an explicit opt-in.
 - **stdio** transport by default; optional **HTTP** transport hardened with CORS
@@ -25,6 +21,25 @@ pip install -e .          # or: pip install -e .[dev] for tests
 
 ## 1. Create a Tastytrade OAuth application
 
+### Sandbox (recommended first)
+
+The Tastytrade sandbox ([developer.tastytrade.com/sandbox/](https://developer.tastytrade.com/sandbox/))
+is a full copy of the platform where you can trade freely without real money.
+It resets every 24 hours (trades and positions cleared; account and credentials preserved).
+
+- **API base URL:** `api.cert.tastyworks.com`
+- **Market data:** quotes are delayed 15 minutes in the sandbox
+- Register a sandbox account at the developer portal if you don't have one
+
+Once you have a sandbox account, create an OAuth application in the sandbox web app
+(**Manage → My Profile → API → OAuth Applications**) — same steps as production below.
+Then use the SDK's login helper to get a refresh token interactively:
+
+```python
+from tastytrade.oauth import login
+login(is_test=True)   # opens browser, prints refresh token
+```
+
 ### Production
 
 1. In the Tastytrade web app, open **Manage → My Profile → API → OAuth Applications**.
@@ -32,30 +47,6 @@ pip install -e .          # or: pip install -e .[dev] for tests
    `http://localhost:8000` as a valid redirect/callback URI.
 3. Save the **client secret** (shown once).
 4. Create a **grant** to obtain a long-lived **refresh token**.
-
-### Sandbox (recommended first)
-
-The Tastytrade sandbox ([developer.tastytrade.com/sandbox/](https://developer.tastytrade.com/sandbox/))
-is a full copy of the platform against which you can trade freely without real money.
-It resets every 24 hours (trades/positions cleared; account and credentials preserved).
-
-- **API base URL:** `api.cert.tastyworks.com`
-- **Market data:** quotes are delayed 15 minutes in the sandbox
-- **Register** a sandbox account at the developer portal if you don't have one
-
-Once you have a sandbox account, obtain OAuth credentials the same way as production
-(OAuth Applications in the sandbox web app), then store them separately:
-
-```bash
-tastytrade-mcp secrets set --sandbox
-```
-
-Or use the SDK's built-in sandbox login helper to get a refresh token interactively:
-
-```python
-from tastytrade.oauth import login
-login(is_test=True)   # opens browser, prints refresh token
-```
 
 > Never paste secrets into code, `.env`, or version control.
 
@@ -67,10 +58,8 @@ tastytrade-mcp secrets status --sandbox
 ```
 
 You'll be prompted (hidden input) for the client secret, refresh token, and an
-optional default account number.
-
-The `secrets status` command also shows which keyring backend is active — useful
-for diagnosing credential issues on a new machine.
+optional default account number. `secrets status` also shows which keyring backend
+is active — useful for diagnosing credential issues on a new machine.
 
 ### Headless Linux (servers, Docker, CI)
 
@@ -85,8 +74,7 @@ tastytrade-mcp secrets set --sandbox
 
 `EncryptedKeyring` stores secrets in `~/.local/share/python_keyring/cryptedpass.cfg`
 encrypted with a master password you set on first use. Keep this file out of
-version control. The `PYTHON_KEYRING_BACKEND` variable selects the backend only;
-it is not a secret.
+version control. `PYTHON_KEYRING_BACKEND` selects the backend only; it is not a secret.
 
 ## 3. Configure
 
@@ -161,11 +149,12 @@ get_option_chain({
 
 Greeks come from the **DXLink streaming feed** (not the chain endpoint), so this
 adds latency and is opt-in. With `include_greeks` and no `expiration`, the tool
-defaults to the **nearest** expiration to bound the subscription. An ATM window of strikes is applied by default (`strike_count` defaults to **15**
-each side of the money, centered on `around_price` or the median strike) to keep
-the subscription small and fast; pass `strike_count: null` for the full chain.
-If the feed is slow or unavailable, the chain is still returned and
-`greeks_complete` / `greeks_received` report coverage rather than failing.
+defaults to the **nearest** expiration to bound the subscription. An ATM window
+is applied by default (`strike_count` defaults to **15** strikes each side of the
+money, centered on `around_price` or the median strike) to keep the subscription
+small and fast; pass `strike_count: null` for the full chain. If the feed is slow
+or unavailable, the chain is still returned and `greeks_complete` / `greeks_received`
+report coverage rather than failing.
 
 ### Order safety layers
 
@@ -200,11 +189,10 @@ figures (`account_deployed_current`, `account_deployed_after`,
 
 ## Safety
 
-- Defaults to **sandbox + live-trading-off**.
 - **Account numbers are masked in logs** to the last 4 digits (`****1234`);
   secrets are never logged.
-- HTTP transport restricts CORS to a single origin and rate-limits to
-  120 requests/minute per IP (HTTP 429 when exceeded).
+- **HTTP transport** restricts CORS to a single configured origin and rate-limits
+  to 120 requests/minute per IP (HTTP 429 when exceeded).
 
 ## Development
 
