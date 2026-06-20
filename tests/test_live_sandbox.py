@@ -22,7 +22,6 @@ from decimal import Decimal
 import pytest
 
 from tastytrade_mcp import credentials
-from tastytrade_mcp.config import Config
 from tastytrade_mcp.server import build_server
 from tastytrade_mcp.session import get_session, reset_session
 
@@ -40,31 +39,14 @@ pytestmark = [
 ]
 
 
-def _live_config(**overrides):
-    base = dict(
-        sandbox=True,
-        enable_live_trading=True,
-        force_dry_run=True,  # belt-and-suspenders: never submit from a test
-        buying_power_buffer_pct=0.0,
-        account_deploy_limit_pct=0.0,
-        log_level="INFO",
-        cors_origin="http://localhost:3333",
-        rate_limit="120/minute",
-        http_host="127.0.0.1",
-        http_port=7698,
-    )
-    base.update(overrides)
-    return Config(**base)
-
-
 @pytest.fixture
-def config():
+def config(make_config):
     # Rebuild the OAuth session per test: the SDK's async HTTP client binds to
     # the event loop it was created in, and pytest-asyncio uses a fresh loop per
     # test, so a cached session would fail with "Event loop is closed".
+    # force_dry_run=True is belt-and-suspenders: never submit from a test.
     reset_session()
-    cfg = _live_config()
-    yield cfg
+    yield make_config(force_dry_run=True)
     reset_session()
 
 

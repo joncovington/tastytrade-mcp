@@ -1,25 +1,9 @@
 from types import SimpleNamespace
 
 from tastytrade_mcp import server, session
-from tastytrade_mcp.config import Config
 
 
-def _config():
-    return Config(
-        sandbox=True,
-        enable_live_trading=False,
-        force_dry_run=False,
-        buying_power_buffer_pct=0.0,
-        account_deploy_limit_pct=0.0,
-        log_level="INFO",
-        cors_origin="http://localhost:3333",
-        rate_limit="120/minute",
-        http_host="127.0.0.1",
-        http_port=7698,
-    )
-
-
-def test_run_handles_ctrl_c_gracefully(monkeypatch):
+def test_run_handles_ctrl_c_gracefully(monkeypatch, make_config):
     """A KeyboardInterrupt from the transport should not propagate, and the
     session must be closed on the way out."""
     closed = {"called": False}
@@ -34,7 +18,7 @@ def test_run_handles_ctrl_c_gracefully(monkeypatch):
     )
 
     # Should return cleanly, not raise.
-    server.run(transport="stdio", config=_config())
+    server.run(transport="stdio", config=make_config(enable_live_trading=False))
     assert closed["called"]
 
 
