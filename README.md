@@ -135,7 +135,8 @@ figures (`account_deployed_current`, `account_deployed_after`,
 
 ```bash
 pip install -e .[dev]
-pytest                       # unit tests (SDK mocked, no network)
+pytest                       # unit + integration tests (SDK mocked, no network)
+pytest --cov                 # with coverage report
 ```
 
 ### Live sandbox integration tests
