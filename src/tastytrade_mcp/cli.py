@@ -3,7 +3,7 @@
 Usage:
     tastytrade-mcp                      # run the MCP server over stdio (default)
     tastytrade-mcp --transport http     # run over HTTP (CORS + rate limited)
-    tastytrade-mcp --sandbox --enable-live-trading
+    tastytrade-mcp --enable-live-trading
     tastytrade-mcp secrets set          # store OAuth credentials in the keyring
     tastytrade-mcp secrets status       # show which credentials are stored
     tastytrade-mcp secrets delete       # remove stored credentials
@@ -21,26 +21,14 @@ import sys
 from rich.console import Console
 
 from . import credentials
-from .config import get_config
 from .credentials import CredentialError
 
 console = Console()
 
 
-def _env_flag(args: argparse.Namespace) -> bool:
-    """Resolve the sandbox flag: --sandbox/--production override config."""
-    if getattr(args, "sandbox", False):
-        return True
-    if getattr(args, "production", False):
-        return False
-    return get_config().sandbox
-
-
 def _cmd_secrets_set(args: argparse.Namespace) -> int:
-    sandbox = _env_flag(args)
-    env = "sandbox" if sandbox else "production"
     console.print(
-        f"[bold]Storing {env} Tastytrade credentials in the keyring.[/] "
+        f"[bold]Storing Tastytrade credentials in the keyring.[/] "
         f"([dim]backend: {credentials.get_backend_name()}[/])"
     )
     console.print("Leave a field blank to keep the existing value.\n")
@@ -59,7 +47,7 @@ def _cmd_secrets_set(args: argparse.Namespace) -> int:
                 else input(f"{label}: ")
             ).strip()
             if value:
-                credentials.set_secret(key, value, sandbox=sandbox)
+                credentials.set_secret(key, value)
                 console.print(f"  [green]stored[/] {key}")
             else:
                 console.print(f"  [dim]skipped[/] {key}")
@@ -67,58 +55,48 @@ def _cmd_secrets_set(args: argparse.Namespace) -> int:
         console.print(f"\n[red]Keyring error:[/] {exc}")
         return 1
 
-    if credentials.secrets_present(sandbox=sandbox):
-        console.print(f"\n[green]OK[/] {env} credentials are ready.")
+    if credentials.secrets_present():
+        console.print("\n[green]OK[/] Credentials are ready.")
         return 0
-    missing = ", ".join(credentials.missing_secrets(sandbox=sandbox))
+    missing = ", ".join(credentials.missing_secrets())
     console.print(f"\n[yellow]![/] Still missing required: {missing}")  # noqa: RUF001
     return 1
 
 
-def _cmd_secrets_status(args: argparse.Namespace) -> int:
-    sandbox = _env_flag(args)
-    env = "sandbox" if sandbox else "production"
+def _cmd_secrets_status(_args: argparse.Namespace) -> int:
     console.print(
-        f"[bold]{env} credentials[/] "
+        f"[bold]Tastytrade credentials[/] "
         f"([dim]backend: {credentials.get_backend_name()}[/])"
     )
     try:
         for key in credentials.ALL_SECRETS:
-            present = credentials.get_secret(key, sandbox=sandbox) is not None
+            present = credentials.get_secret(key) is not None
             mark = "[green]set[/]" if present else "[red]missing[/]"
             console.print(f"  {key}: {mark}")
     except CredentialError as exc:
         console.print(f"  [red]Keyring error:[/] {exc}")
         return 1
-    return 0 if credentials.secrets_present(sandbox=sandbox) else 1
+    return 0 if credentials.secrets_present() else 1
 
 
-def _cmd_secrets_delete(args: argparse.Namespace) -> int:
-    sandbox = _env_flag(args)
-    env = "sandbox" if sandbox else "production"
+def _cmd_secrets_delete(_args: argparse.Namespace) -> int:
     try:
         removed = [
-            key
-            for key in credentials.ALL_SECRETS
-            if credentials.delete_secret(key, sandbox=sandbox)
+            key for key in credentials.ALL_SECRETS if credentials.delete_secret(key)
         ]
     except CredentialError as exc:
         console.print(f"[red]Keyring error:[/] {exc}")
         return 1
     if removed:
-        console.print(f"[green]Removed {env} secrets:[/] {', '.join(removed)}")
+        console.print(f"[green]Removed credentials:[/] {', '.join(removed)}")
     else:
-        console.print(f"[dim]No {env} secrets were stored.[/]")
+        console.print("[dim]No credentials were stored.[/]")
     return 0
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
-    # Startup flags override the corresponding env vars. Config is env-driven, so
-    # we set the env before importing/running the server (single source of truth).
     if args.enable_live_trading:
         os.environ["ENABLE_LIVE_TRADING"] = "true"
-    if args.sandbox:
-        os.environ["TASTYTRADE_SANDBOX"] = "true"
 
     # Imported lazily so `secrets` commands don't pay the MCP import cost.
     from .server import run
@@ -141,33 +119,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--enable-live-trading",
         action="store_true",
-        help="Register order-placing tools (needed to test execute_trade).",
-    )
-    parser.add_argument(
-        "--sandbox",
-        action="store_true",
-        help="Use the Tastytrade sandbox/cert environment.",
+        help="Register order-placing tools.",
     )
 
     sub = parser.add_subparsers(dest="command")
 
-    # Parent parser so --sandbox/--production work on every leaf subcommand.
-    env_flags = argparse.ArgumentParser(add_help=False)
-    env_flags.add_argument("--sandbox", action="store_true", help="Target sandbox.")
-    env_flags.add_argument(
-        "--production", action="store_true", help="Target production."
-    )
-
     secrets = sub.add_parser("secrets", help="Manage stored OAuth credentials.")
     secrets_sub = secrets.add_subparsers(dest="secrets_command", required=True)
     secrets_sub.add_parser(
-        "set", help="Store credentials.", parents=[env_flags]
+        "set", help="Store credentials."
     ).set_defaults(func=_cmd_secrets_set)
     secrets_sub.add_parser(
-        "status", help="Show stored credentials.", parents=[env_flags]
+        "status", help="Show stored credentials."
     ).set_defaults(func=_cmd_secrets_status)
     secrets_sub.add_parser(
-        "delete", help="Remove credentials.", parents=[env_flags]
+        "delete", help="Remove credentials."
     ).set_defaults(func=_cmd_secrets_delete)
 
     return parser

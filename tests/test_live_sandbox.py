@@ -1,14 +1,14 @@
-"""Live integration tests against the Tastytrade sandbox (cert) environment.
+"""Live integration tests against the Tastytrade production environment.
 
 These confirm the SDK + OAuth + API contract actually works with the credentials
 stored in the OS keyring — the one path the mocked unit tests cannot cover.
 
 OPT-IN ONLY. The whole module is skipped unless BOTH are true:
-  * sandbox credentials are present in the keyring
-    (`tastytrade-mcp secrets set --sandbox`), and
-  * the env var RUN_LIVE_SANDBOX=1 is set.
+  * credentials are present in the keyring
+    (`tastytrade-mcp secrets set`), and
+  * the env var RUN_LIVE=1 is set.
 
-Run with:   RUN_LIVE_SANDBOX=1 pytest -m live -v
+Run with:   RUN_LIVE=1 pytest -m live -v
 
 The server is built with force_dry_run=True so these tests can NEVER submit a
 real order, even by mistake.
@@ -27,12 +27,10 @@ from tastytrade_mcp.session import get_session, reset_session
 
 pytestmark = pytest.mark.live
 
-_RUN = os.getenv("RUN_LIVE_SANDBOX") == "1"
-_HAS_CREDS = credentials.secrets_present(sandbox=True)
+_RUN = os.getenv("RUN_LIVE") == "1"
+_HAS_CREDS = credentials.secrets_present()
 
-skip_reason = (
-    "set RUN_LIVE_SANDBOX=1 and store sandbox credentials to run live tests"
-)
+skip_reason = "set RUN_LIVE=1 and store credentials to run live tests"
 pytestmark = [
     pytest.mark.live,
     pytest.mark.skipif(not (_RUN and _HAS_CREDS), reason=skip_reason),
@@ -66,8 +64,8 @@ async def _call(mcp, name, args=None):
 @pytest.mark.asyncio
 async def test_oauth_session_builds_and_refreshes(config):
     """A session can be built from stored creds (this triggers a token fetch)."""
-    session = get_session(config)
-    assert session is not None
+    s = get_session(config)
+    assert s is not None
 
 
 @pytest.mark.asyncio
@@ -75,7 +73,6 @@ async def test_connection_status(mcp):
     res = await _call(mcp, "get_connection_status")
     assert res["ok"] is True
     assert res["connected"] is True
-    assert res["environment"] == "sandbox"
     assert res["account_count"] >= 1
 
 
@@ -88,10 +85,9 @@ async def test_account_info_returns_numeric_buying_power(mcp):
     assert res["ok"] is True
     assert res["account_number"]
     balances = res["balances"]
-    # The risk checks depend on these fields existing and being numeric.
     for key in ("derivative_buying_power", "used_derivative_buying_power"):
         assert key in balances, f"missing balance field: {key}"
-        Decimal(str(balances[key]))  # parses without error
+        Decimal(str(balances[key]))
 
 
 @pytest.mark.asyncio
@@ -122,8 +118,8 @@ async def test_list_accounts(mcp):
 @pytest.mark.asyncio
 async def test_option_chain_for_liquid_symbol(mcp):
     res = await _call(mcp, "get_option_chain", {"symbol": "SPY"})
-    if not res["ok"] and _is_sandbox_outage(res):
-        pytest.skip("sandbox option-chain endpoint unavailable (5xx)")
+    if not res["ok"] and _is_outage(res):
+        pytest.skip("option-chain endpoint unavailable (5xx)")
     assert res["ok"] is True
     assert res["chain"], "expected at least one expiration"
 
@@ -131,25 +127,21 @@ async def test_option_chain_for_liquid_symbol(mcp):
 @pytest.mark.asyncio
 async def test_market_overview(mcp):
     res = await _call(mcp, "get_market_overview", {"symbols": ["SPY"]})
-    # The cert environment frequently 502s on /market-metrics; tolerate that.
-    if not res["ok"] and _is_sandbox_outage(res):
-        pytest.skip("sandbox market-metrics endpoint unavailable (5xx)")
+    if not res["ok"] and _is_outage(res):
+        pytest.skip("market-metrics endpoint unavailable (5xx)")
     assert res["ok"] is True
 
 
 # --------------------------------------------------------------------------- #
-# Order path — dry-run only (force_dry_run=True), confirms NewOrder -> API
+# Order path — dry-run only (force_dry_run=True)
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 async def test_equity_dry_run_validates_against_api(mcp):
-    """A well-formed equity order should pass dry-run validation and come back
-    with a buying-power effect — proving the full order path talks to the API."""
-    # A limit order well below market validates regardless of market hours and
-    # will never fill — safe for a dry-run round-trip.
+    """A well-formed equity order should pass dry-run validation."""
     order = {
         "time_in_force": "Day",
         "order_type": "Limit",
-        "price": 1.00,  # positive = debit (buying)
+        "price": 1.00,
         "legs": [
             {
                 "instrument_type": "Equity",
@@ -160,27 +152,22 @@ async def test_equity_dry_run_validates_against_api(mcp):
         ],
     }
     res = await _call(mcp, "execute_trade", {"order": order, "dry_run": True})
-    if not res.get("ok") and _is_sandbox_outage(res):
-        pytest.skip("sandbox order endpoint unavailable (5xx)")
-    # Success path: validated with a buying-power effect. A structured API
-    # rejection (problems, or an error message from the API) also proves the SDK
-    # round-tripped — what we must not see is a connection/auth failure.
+    if not res.get("ok") and _is_outage(res):
+        pytest.skip("order endpoint unavailable (5xx)")
     assert "buying_power" in res or "problems" in res or _is_api_validation(res)
     if res.get("ok"):
         assert res["dry_run"] is True
         assert "change_in_buying_power" in res["buying_power"]
 
 
-def _is_sandbox_outage(res: dict) -> bool:
+def _is_outage(res: dict) -> bool:
     text = (str(res.get("error", "")) + " ".join(map(str, res.get("problems", [])))).lower()
     return any(t in text for t in ("502", "503", "504", "bad gateway", "<html", "couldn't parse"))
 
 
 def _is_api_validation(res: dict) -> bool:
-    """An API-level business-rule rejection (not a transport/auth failure) still
-    proves the SDK reached the brokerage and got a structured answer back."""
     err = str(res.get("error", "")).lower()
-    if not err or _is_sandbox_outage(res):
+    if not err or _is_outage(res):
         return False
     transport_failures = ("connect", "timeout", "ssl", "unauthorized", "401", "403", "oauth", "token")
     return not any(t in err for t in transport_failures)

@@ -16,8 +16,8 @@ def test_missing_credentials_raises(make_config):
 
 
 def test_builds_and_caches_session(monkeypatch, make_config):
-    credentials.set_secret(credentials.CLIENT_SECRET, "cs", sandbox=True)
-    credentials.set_secret(credentials.REFRESH_TOKEN, "rt", sandbox=True)
+    credentials.set_secret(credentials.CLIENT_SECRET, "cs")
+    credentials.set_secret(credentials.REFRESH_TOKEN, "rt")
 
     calls = []
 
@@ -30,4 +30,4 @@ def test_builds_and_caches_session(monkeypatch, make_config):
     s1 = session.get_session(make_config())
     s2 = session.get_session(make_config())
     assert s1 is s2  # cached
-    assert calls == [("cs", "rt", True)]
+    assert calls == [("cs", "rt", False)]  # always live

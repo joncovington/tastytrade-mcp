@@ -43,7 +43,6 @@ async def test_full_meic_loop_iteration(make_config, call_tool):
 
     status = await call_tool(mcp, "get_connection_status")
     assert status["ok"] and status["connected"]
-    assert status["environment"] == "sandbox"
     assert status["account_count"] == 1
 
     info = await call_tool(mcp, "get_account_info")

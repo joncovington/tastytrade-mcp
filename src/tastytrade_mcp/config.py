@@ -25,7 +25,6 @@ def _as_bool(value: str | None, default: bool = False) -> bool:
 class Config:
     """Resolved server configuration."""
 
-    sandbox: bool
     enable_live_trading: bool
     force_dry_run: bool
     buying_power_buffer_pct: float
@@ -41,7 +40,6 @@ class Config:
     @classmethod
     def from_env(cls) -> "Config":
         return cls(
-            sandbox=_as_bool(os.getenv("TASTYTRADE_SANDBOX"), default=False),
             enable_live_trading=_as_bool(
                 os.getenv("ENABLE_LIVE_TRADING"), default=False
             ),

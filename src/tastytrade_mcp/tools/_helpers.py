@@ -33,9 +33,7 @@ async def get_account(config: Config, account_number: str | None = None) -> Acco
     account on the session.
     """
     session = get_session(config)
-    number = account_number or credentials.get_secret(
-        credentials.ACCOUNT_NUMBER, sandbox=config.sandbox
-    )
+    number = account_number or credentials.get_secret(credentials.ACCOUNT_NUMBER)
     if number:
         return await Account.get(session, number)
     accounts = await Account.get(session)

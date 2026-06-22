@@ -37,9 +37,8 @@ def run(transport: str = "stdio", config: Config | None = None) -> None:
     config = config or get_config()
     configure_logging(config.log_level)
     logger.info(
-        "Starting tastytrade-mcp (transport=%s, environment=%s, live_trading=%s)",
+        "Starting tastytrade-mcp (transport=%s, live_trading=%s)",
         transport,
-        "sandbox" if config.sandbox else "production",
         config.enable_live_trading,
     )
 

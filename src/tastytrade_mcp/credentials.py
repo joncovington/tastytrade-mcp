@@ -1,4 +1,4 @@
-"""Keyring-backed credential storage — mirrors the meic-trader pattern.
+"""Keyring-backed credential storage.
 
 Secrets are stored in the OS keyring:
   - Windows  → Credential Manager (DPAPI-backed)
@@ -8,8 +8,6 @@ Secrets are stored in the OS keyring:
                ``[headless]`` extra: ``pip install tastytrade-mcp[headless]``)
 
 Nothing is ever written to disk in plaintext, and secrets are never logged.
-Secrets are namespaced per environment (production vs sandbox) so a single
-machine can hold credentials for both.
 """
 
 from __future__ import annotations
@@ -29,15 +27,16 @@ ACCOUNT_NUMBER = "account_number"
 REQUIRED_SECRETS = (CLIENT_SECRET, REFRESH_TOKEN)
 ALL_SECRETS = (CLIENT_SECRET, REFRESH_TOKEN, ACCOUNT_NUMBER)
 
+# Keyring username prefix — kept for backward compatibility with existing entries.
+_PREFIX = "production"
+
 
 class CredentialError(RuntimeError):
     """Raised when a keyring operation fails due to missing backend or secret."""
 
 
-def _entry(key: str, *, sandbox: bool) -> str:
-    """Build the namespaced keyring username for a secret."""
-    env = "sandbox" if sandbox else "production"
-    return f"{env}:{key}"
+def _entry(key: str) -> str:
+    return f"{_PREFIX}:{key}"
 
 
 def _no_keyring_hint() -> str:
@@ -61,30 +60,30 @@ def get_backend_name() -> str:
         return "unknown"
 
 
-def get_secret(key: str, *, sandbox: bool) -> str | None:
+def get_secret(key: str) -> str | None:
     """Fetch a secret from the keyring, or ``None`` if not set."""
     try:
-        return keyring.get_password(SERVICE_NAME, _entry(key, sandbox=sandbox))
+        return keyring.get_password(SERVICE_NAME, _entry(key))
     except keyring.errors.NoKeyringError as exc:
         raise CredentialError(_no_keyring_hint()) from exc
     except keyring.errors.KeyringError as exc:
         raise CredentialError(f"Keyring read failed: {exc}") from exc
 
 
-def set_secret(key: str, value: str, *, sandbox: bool) -> None:
+def set_secret(key: str, value: str) -> None:
     """Store a secret in the keyring."""
     try:
-        keyring.set_password(SERVICE_NAME, _entry(key, sandbox=sandbox), value)
+        keyring.set_password(SERVICE_NAME, _entry(key), value)
     except keyring.errors.NoKeyringError as exc:
         raise CredentialError(_no_keyring_hint()) from exc
     except keyring.errors.KeyringError as exc:
         raise CredentialError(f"Keyring write failed: {exc}") from exc
 
 
-def delete_secret(key: str, *, sandbox: bool) -> bool:
+def delete_secret(key: str) -> bool:
     """Delete a secret. Returns True if it existed, False otherwise."""
     try:
-        keyring.delete_password(SERVICE_NAME, _entry(key, sandbox=sandbox))
+        keyring.delete_password(SERVICE_NAME, _entry(key))
         return True
     except keyring.errors.PasswordDeleteError:
         return False
@@ -94,11 +93,11 @@ def delete_secret(key: str, *, sandbox: bool) -> bool:
         raise CredentialError(f"Keyring delete failed: {exc}") from exc
 
 
-def secrets_present(*, sandbox: bool) -> bool:
+def secrets_present() -> bool:
     """True when all required secrets for an OAuth session are present."""
-    return all(get_secret(k, sandbox=sandbox) for k in REQUIRED_SECRETS)
+    return all(get_secret(k) for k in REQUIRED_SECRETS)
 
 
-def missing_secrets(*, sandbox: bool) -> list[str]:
+def missing_secrets() -> list[str]:
     """Return the list of required secrets that are not yet stored."""
-    return [k for k in REQUIRED_SECRETS if not get_secret(k, sandbox=sandbox)]
+    return [k for k in REQUIRED_SECRETS if not get_secret(k)]

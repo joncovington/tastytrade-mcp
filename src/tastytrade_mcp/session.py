@@ -24,51 +24,36 @@ class CredentialsMissingError(RuntimeError):
 
 _lock = threading.Lock()
 _session: Session | None = None
-_session_sandbox: bool | None = None
 
 
-def _build_session(config: Config) -> Session:
-    missing = credentials.missing_secrets(sandbox=config.sandbox)
+def _build_session() -> Session:
+    missing = credentials.missing_secrets()
     if missing:
-        env = "sandbox" if config.sandbox else "production"
         raise CredentialsMissingError(
-            f"Missing {env} credentials: {', '.join(missing)}. "
+            f"Missing credentials: {', '.join(missing)}. "
             "Run `tastytrade-mcp secrets set` to store them."
         )
-
-    client_secret = credentials.get_secret(
-        credentials.CLIENT_SECRET, sandbox=config.sandbox
-    )
-    refresh_token = credentials.get_secret(
-        credentials.REFRESH_TOKEN, sandbox=config.sandbox
-    )
-    logger.info(
-        "Building Tastytrade OAuth session (sandbox=%s)", config.sandbox
-    )
-    return Session(client_secret, refresh_token, is_test=config.sandbox)
+    client_secret = credentials.get_secret(credentials.CLIENT_SECRET)
+    refresh_token = credentials.get_secret(credentials.REFRESH_TOKEN)
+    logger.info("Building Tastytrade OAuth session")
+    return Session(client_secret, refresh_token, is_test=False)
 
 
 def get_session(config: Config | None = None) -> Session:
-    """Return a cached OAuth session, building it on first use.
-
-    Thread-safe. Rebuilds if the requested environment (sandbox vs production)
-    differs from the cached one.
-    """
-    global _session, _session_sandbox
-    config = config or get_config()
+    """Return a cached OAuth session, building it on first use. Thread-safe."""
+    global _session
+    config = config or get_config()  # noqa: F841 - retained for call-site compat
     with _lock:
-        if _session is None or _session_sandbox != config.sandbox:
-            _session = _build_session(config)
-            _session_sandbox = config.sandbox
+        if _session is None:
+            _session = _build_session()
         return _session
 
 
 def reset_session() -> None:
     """Drop the cached session (used by tests / after credential changes)."""
-    global _session, _session_sandbox
+    global _session
     with _lock:
         _session = None
-        _session_sandbox = None
 
 
 def close_session() -> None:
@@ -78,11 +63,10 @@ def close_session() -> None:
     — we only close any open httpx clients so a Ctrl-C exits cleanly without
     leaking sockets or emitting unclosed-client warnings.
     """
-    global _session, _session_sandbox
+    global _session
     with _lock:
         session = _session
         _session = None
-        _session_sandbox = None
 
     if session is None:
         return

@@ -52,7 +52,6 @@ def make_config():
 
     def _make(**overrides):
         base = dict(
-            sandbox=True,
             enable_live_trading=True,
             force_dry_run=False,
             buying_power_buffer_pct=0.0,
@@ -184,8 +183,8 @@ def mock_sdk(monkeypatch, fake_account):
     from tastytrade_mcp import credentials, session
     from tastytrade_mcp.tools import market, strategy
 
-    credentials.set_secret(credentials.CLIENT_SECRET, "cs", sandbox=True)
-    credentials.set_secret(credentials.REFRESH_TOKEN, "rt", sandbox=True)
+    credentials.set_secret(credentials.CLIENT_SECRET, "cs")
+    credentials.set_secret(credentials.REFRESH_TOKEN, "rt")
 
     session.reset_session()
     monkeypatch.setattr(session, "Session", lambda *a, **k: SimpleNamespace())

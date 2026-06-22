@@ -21,27 +21,6 @@ pip install -e .          # or: pip install -e .[dev] for tests
 
 ## 1. Create a Tastytrade OAuth application
 
-### Sandbox (recommended first)
-
-The Tastytrade sandbox ([developer.tastytrade.com/sandbox/](https://developer.tastytrade.com/sandbox/))
-is a full copy of the platform where you can trade freely without real money.
-It resets every 24 hours (trades and positions cleared; account and credentials preserved).
-
-- **API base URL:** `api.cert.tastyworks.com`
-- **Market data:** quotes are delayed 15 minutes in the sandbox
-- Register a sandbox account at the developer portal if you don't have one
-
-Once you have a sandbox account, create an OAuth application in the sandbox web app
-(**Manage → My Profile → API → OAuth Applications**) — same steps as production below.
-Then use the SDK's login helper to get a refresh token interactively:
-
-```python
-from tastytrade.oauth import login
-login(is_test=True)   # opens browser, prints refresh token
-```
-
-### Production
-
 1. In the Tastytrade web app, open **Manage → My Profile → API → OAuth Applications**.
 2. Create an application, select the scopes you need (read + trading), and add
    `http://localhost:8000` as a valid redirect/callback URI.
@@ -53,8 +32,8 @@ login(is_test=True)   # opens browser, prints refresh token
 ## 2. Store credentials in the keyring
 
 ```bash
-tastytrade-mcp secrets set --sandbox      # or --production
-tastytrade-mcp secrets status --sandbox
+tastytrade-mcp secrets set
+tastytrade-mcp secrets status
 ```
 
 You'll be prompted (hidden input) for the client secret, refresh token, and an
@@ -69,7 +48,7 @@ daemon) the native backend is unavailable. Install the encrypted-file fallback:
 ```bash
 pip install 'tastytrade-mcp[headless]'
 export PYTHON_KEYRING_BACKEND=keyrings.alt.file.EncryptedKeyring
-tastytrade-mcp secrets set --sandbox
+tastytrade-mcp secrets set
 ```
 
 `EncryptedKeyring` stores secrets in `~/.local/share/python_keyring/cryptedpass.cfg`
@@ -82,7 +61,6 @@ Copy `.env.example` to `.env` and adjust. Key flags:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `TASTYTRADE_SANDBOX` | `false` | Use the sandbox/cert environment |
 | `ENABLE_LIVE_TRADING` | `false` | Register order-placing tools |
 | `FORCE_DRY_RUN` | `false` | Force all orders to dry-run (propose-only mode) |
 | `BUYING_POWER_BUFFER_PCT` | `0` | Percent of buying power always kept in reserve (per order) |
@@ -106,8 +84,7 @@ Claude Desktop / Claude Code MCP config:
 {
   "mcpServers": {
     "tastytrade": {
-      "command": "tastytrade-mcp",
-      "env": { "TASTYTRADE_SANDBOX": "true" }
+      "command": "tastytrade-mcp"
     }
   }
 }
@@ -202,29 +179,28 @@ pytest                       # unit + integration tests (SDK mocked, no network)
 pytest --cov                 # with coverage report
 ```
 
-### Live sandbox integration tests
+### Live integration tests
 
-A separate, opt-in suite hits the real Tastytrade **sandbox** using your stored
+A separate, opt-in suite hits the real Tastytrade API using your stored
 credentials to confirm the SDK + OAuth + API contract works end-to-end. It is
 skipped by default and never submits a real order (the test server runs with
 `force_dry_run=true`). To run it:
 
 ```bash
-tastytrade-mcp secrets set --sandbox     # if not already stored
-RUN_LIVE_SANDBOX=1 pytest -m live -v
+tastytrade-mcp secrets set     # if not already stored
+RUN_LIVE=1 pytest -m live -v
 ```
 
-Tests that depend on cert endpoints which are intermittently unavailable (e.g.
+Tests that depend on endpoints which are intermittently unavailable (e.g.
 `/market-metrics`) skip themselves on a 5xx rather than failing.
 
 ## Disclaimer
 
 This software can place real orders against a live brokerage account. It is
 provided **"as is", with no warranty**, and is **not financial advice**. You are
-solely responsible for any trades it places and any resulting losses. Test in the
-sandbox (`TASTYTRADE_SANDBOX=true`) before enabling live trading, and review the
-order-safety controls above. The built-in risk checks reduce — but do not
-eliminate — the risk of an unintended or oversized order.
+solely responsible for any trades it places and any resulting losses. Review the
+order-safety controls above before enabling live trading. The built-in risk checks
+reduce — but do not eliminate — the risk of an unintended or oversized order.
 
 This is an independent project and is **not affiliated with, endorsed by, or
 sponsored by tastytrade**. It uses the unofficial third-party

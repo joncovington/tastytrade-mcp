@@ -18,19 +18,15 @@ logger = logging.getLogger(__name__)
 def register(mcp, config: Config) -> None:
     @mcp.tool()
     async def get_connection_status() -> dict[str, Any]:
-        """Check Tastytrade connectivity and report environment configuration.
+        """Check Tastytrade connectivity and report server configuration.
 
-        Returns whether credentials are present, the active environment
-        (sandbox vs production), whether live trading is enabled, and how many
-        accounts the session can see.
+        Returns whether credentials are present, whether live trading is
+        enabled, and how many accounts the session can see.
         """
         status: dict[str, Any] = {
             "ok": True,
-            "environment": "sandbox" if config.sandbox else "production",
             "live_trading_enabled": config.enable_live_trading,
-            "credentials_present": credentials.secrets_present(
-                sandbox=config.sandbox
-            ),
+            "credentials_present": credentials.secrets_present(),
         }
         if not status["credentials_present"]:
             status["ok"] = False
