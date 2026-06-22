@@ -46,4 +46,11 @@ async def get_account(config: Config, account_number: str | None = None) -> Acco
 
 def error_payload(exc: Exception) -> dict[str, Any]:
     """Standard error shape returned to the agent (never includes secrets)."""
-    return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    msg = f"{type(exc).__name__}: {exc}"
+    # Surface retryability for transient upstream HTTP errors (5xx).
+    retryable = any(f" {code} " in str(exc) or str(exc).endswith(str(code))
+                    for code in (500, 502, 503, 504))
+    result: dict[str, Any] = {"ok": False, "error": msg}
+    if retryable:
+        result["retryable"] = True
+    return result
