@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def _num(value: Any) -> float | None:
-    """Coerce a greek/IV value to a float, or None if unavailable."""
+    """Coerce a greek/IV/price value to a float, or None if unavailable."""
     if value is None:
         return None
     try:
@@ -62,6 +62,43 @@ async def _collect_greeks(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("greeks collection failed: %s", exc)
+    return out
+
+
+async def _collect_quotes(
+    session: Any, streamer_symbols: list[str], timeout: float
+) -> dict[str, Any]:
+    """Stream live bid/ask quotes for the given DXLink streamer symbols.
+
+    Returns a mapping of ``event_symbol -> Quote``. Best-effort: on timeout or
+    streaming error it returns whatever quotes arrived (possibly empty).
+    """
+    from tastytrade import DXLinkStreamer
+    from tastytrade.dxfeed import Quote
+
+    out: dict[str, Any] = {}
+    symbols = [s for s in streamer_symbols if s]
+    if not symbols:
+        return out
+
+    async def _drain(streamer) -> None:
+        remaining = set(symbols)
+        async for event in streamer.listen(Quote):
+            out[event.event_symbol] = event
+            remaining.discard(event.event_symbol)
+            if not remaining:
+                return
+
+    try:
+        async with DXLinkStreamer(session) as streamer:
+            await streamer.subscribe(Quote, symbols)
+            await asyncio.wait_for(_drain(streamer), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.info(
+            "quotes collection timed out (%d/%d received)", len(out), len(symbols)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("quotes collection failed: %s", exc)
     return out
 
 
@@ -121,33 +158,40 @@ def register(mcp, config: Config) -> None:
         symbol: str,
         expiration: str | None = None,
         include_greeks: bool = False,
+        include_quotes: bool = False,
         strike_count: int | None = 15,
         around_price: float | None = None,
         greeks_timeout: float = 6.0,
+        quotes_timeout: float = 6.0,
     ) -> dict[str, Any]:
         """Retrieve the option chain for an underlying symbol.
 
         Returns expirations and strikes (with option symbols) grouped by
         expiration date. Each strike entry carries the instrument fields plus,
-        when ``include_greeks`` is true, live per-strike greeks: ``delta``,
-        ``gamma``, ``theta``, and ``iv`` (annualized implied volatility).
+        when requested, live per-strike greeks and/or bid/ask quotes.
 
         Args:
             symbol: Underlying ticker symbol, e.g. "SPY".
             expiration: ISO date (YYYY-MM-DD) to return only that expiration.
-                Recommended with ``include_greeks`` to bound the data fetched.
-            include_greeks: When true, stream live greeks and merge them into
-                each strike. Adds latency; greeks come from the DXLink feed, not
-                the chain endpoint. If the feed is unavailable, the chain is
-                still returned (without greeks) and ``greeks_complete`` is false.
+                Recommended with ``include_greeks`` or ``include_quotes`` to
+                bound the data fetched.
+            include_greeks: When true, stream live greeks and merge ``delta``,
+                ``gamma``, ``theta``, and ``iv`` into each strike. Adds latency;
+                greeks come from the DXLink feed, not the chain endpoint. If the
+                feed is unavailable, the chain is still returned and
+                ``greeks_complete`` is false.
+            include_quotes: When true, stream live bid/ask quotes and merge
+                ``bid``, ``ask``, and ``mid`` (midpoint) into each strike. Same
+                DXLink feed as greeks. If unavailable, ``quotes_complete`` is
+                false but the chain is still returned.
             strike_count: Keep only this many strikes on each side of the money
-                (an ATM window). Defaults to 15, which keeps the greeks
-                subscription small and fast. Pass null/None to return the full
-                chain for the selected expiration(s).
+                (an ATM window). Defaults to 15, which keeps the subscription
+                small and fast. Pass null/None to return the full chain.
             around_price: Underlying price to center the ATM window on (pass the
                 last price from get_market_overview). Defaults to the median
                 strike when omitted.
             greeks_timeout: Seconds to wait for greeks before returning partial.
+            quotes_timeout: Seconds to wait for quotes before returning partial.
         """
         try:
             session = get_session(config)
@@ -155,9 +199,8 @@ def register(mcp, config: Config) -> None:
             if not chain:
                 return {"ok": False, "error": f"No option chain for {symbol}."}
 
-            # Resolve the expiration filter. With greeks and no explicit date,
-            # default to the nearest expiration so we don't subscribe to the
-            # entire multi-expiry chain.
+            # Resolve the expiration filter. With streaming data and no explicit
+            # date, default to the nearest expiration to bound the subscription.
             expirations = sorted(chain.keys())
             selected: list[date]
             if expiration:
@@ -169,7 +212,7 @@ def register(mcp, config: Config) -> None:
                         "available_expirations": [str(e) for e in expirations],
                     }
                 selected = [want]
-            elif include_greeks:
+            elif include_greeks or include_quotes:
                 selected = [_nearest_expiration(expirations)]
             else:
                 selected = expirations
@@ -193,16 +236,16 @@ def register(mcp, config: Config) -> None:
                 "chain": serialized,
             }
 
+            # Collect streamer symbols once; reuse for both greeks and quotes.
+            streamer_symbols = [
+                o.streamer_symbol
+                for opts in options_by_exp.values()
+                for o in opts
+                if getattr(o, "streamer_symbol", None)
+            ]
+
             if include_greeks:
-                streamer_symbols = [
-                    o.streamer_symbol
-                    for opts in options_by_exp.values()
-                    for o in opts
-                    if getattr(o, "streamer_symbol", None)
-                ]
-                greeks = await _collect_greeks(
-                    session, streamer_symbols, greeks_timeout
-                )
+                greeks = await _collect_greeks(session, streamer_symbols, greeks_timeout)
                 received = 0
                 for entries in serialized.values():
                     for entry in entries:
@@ -217,6 +260,27 @@ def register(mcp, config: Config) -> None:
                 result["greeks_complete"] = received == len(streamer_symbols)
                 result["greeks_received"] = received
 
+            if include_quotes:
+                quotes = await _collect_quotes(session, streamer_symbols, quotes_timeout)
+                received = 0
+                for entries in serialized.values():
+                    for entry in entries:
+                        q = quotes.get(entry.get("streamer_symbol"))
+                        if q is not None:
+                            bid = _num(q.bid_price)
+                            ask = _num(q.ask_price)
+                            entry["bid"] = bid
+                            entry["ask"] = ask
+                            entry["mid"] = (
+                                round((bid + ask) / 2, 4)
+                                if bid is not None and ask is not None
+                                else None
+                            )
+                            received += 1
+                result["quotes_included"] = True
+                result["quotes_complete"] = received == len(streamer_symbols)
+                result["quotes_received"] = received
+
             return result
         except Exception as exc:  # noqa: BLE001
             logger.warning("get_option_chain failed: %s", exc)
@@ -224,7 +288,7 @@ def register(mcp, config: Config) -> None:
 
 
 def _entry(option: Any) -> dict[str, Any]:
-    """Serialize one option instrument to a plain dict (greeks merged later)."""
+    """Serialize one option instrument to a plain dict (greeks/quotes merged later)."""
     data = serialize(option)
     if isinstance(data, dict):
         return data

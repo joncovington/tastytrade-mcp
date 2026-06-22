@@ -1,10 +1,4 @@
-"""Strategy builder tools — iron condor construction with rough POP estimates.
-
-This builds candidate iron condors from the option chain. Greeks and live quotes
-require a streaming/market-data subscription; where those are unavailable we
-return the structural legs and a credit-derived probability-of-profit estimate so
-the agent has actionable setups without a live data feed.
-"""
+"""Strategy builder tools — iron condor construction with POP and credit estimates."""
 
 from __future__ import annotations
 
@@ -17,6 +11,7 @@ from tastytrade.instruments import get_option_chain
 from ..config import Config
 from ..session import get_session
 from ._helpers import error_payload, serialize
+from .market import _collect_quotes, _num
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +28,20 @@ def register(mcp, config: Config) -> None:
         target_dte: int = 45,
         wing_width: int = 5,
         short_delta: float = 0.16,
+        quotes_timeout: float = 6.0,
     ) -> dict[str, Any]:
         """Build candidate iron condor setups for an underlying.
 
         Selects an expiration near ``target_dte`` and proposes an iron condor
         with short strikes around the given target delta and the requested wing
-        width. Returns the four legs (short/long put, short/long call) and an
-        estimated probability of profit.
+        width. Returns the four legs (short/long put, short/long call), an
+        estimated probability of profit, and a live net credit estimate derived
+        from bid/ask midpoints on each leg.
+
+        ``net_credit`` is the per-share credit (multiply by 100 for the contract
+        dollar value). It is ``null`` when quotes are unavailable — in that case
+        use ``get_option_chain`` with ``include_quotes=true`` on the specific
+        expiration to get individual leg prices.
 
         Args:
             symbol: Underlying ticker symbol, e.g. "SPY".
@@ -47,6 +49,8 @@ def register(mcp, config: Config) -> None:
             wing_width: Distance in strikes between short and long legs.
             short_delta: Target absolute delta for the short strikes (~0.16
                 corresponds to roughly a 1-standard-deviation short strike).
+            quotes_timeout: Seconds to wait for bid/ask quotes from DXLink
+                before returning without a credit estimate.
         """
         try:
             session = get_session(config)
@@ -79,6 +83,40 @@ def register(mcp, config: Config) -> None:
             # an iron condor's win probability ~ 1 - 2 * short_delta.
             estimated_pop = round(max(0.0, 1.0 - 2.0 * short_delta), 3)
 
+            # Stream bid/ask quotes for the four legs to estimate net credit.
+            legs = [short_put, long_put, short_call, long_call]
+            streamer_symbols = [
+                getattr(leg, "streamer_symbol", None) for leg in legs
+            ]
+            quotes = await _collect_quotes(
+                session, [s for s in streamer_symbols if s], quotes_timeout
+            )
+
+            def _mid(leg: Any) -> float | None:
+                sym = getattr(leg, "streamer_symbol", None)
+                q = quotes.get(sym) if sym else None
+                if q is None:
+                    return None
+                bid, ask = _num(q.bid_price), _num(q.ask_price)
+                return round((bid + ask) / 2, 4) if bid is not None and ask is not None else None
+
+            short_put_mid = _mid(short_put)
+            long_put_mid = _mid(long_put)
+            short_call_mid = _mid(short_call)
+            long_call_mid = _mid(long_call)
+
+            mids = [short_put_mid, long_put_mid, short_call_mid, long_call_mid]
+            net_credit: float | None = None
+            if all(m is not None for m in mids):
+                net_credit = round(
+                    (short_put_mid + short_call_mid) - (long_put_mid + long_call_mid), 4  # type: ignore[operator]
+                )
+
+            def _leg(option: Any, mid: float | None) -> dict[str, Any]:
+                data = serialize(option)
+                base: dict[str, Any] = data if isinstance(data, dict) else {"symbol": str(data)}
+                return {**base, "mid": mid}
+
             return {
                 "ok": True,
                 "symbol": symbol.upper(),
@@ -86,15 +124,18 @@ def register(mcp, config: Config) -> None:
                 "expiration": str(expiration),
                 "dte": (expiration - date.today()).days,
                 "estimated_pop": estimated_pop,
+                "net_credit": net_credit,
+                "net_credit_per_contract": round(net_credit * 100, 2) if net_credit is not None else None,
+                "quotes_complete": all(m is not None for m in mids),
                 "legs": {
-                    "short_put": serialize(short_put),
-                    "long_put": serialize(long_put),
-                    "short_call": serialize(short_call),
-                    "long_call": serialize(long_call),
+                    "short_put": _leg(short_put, short_put_mid),
+                    "long_put": _leg(long_put, long_put_mid),
+                    "short_call": _leg(short_call, short_call_mid),
+                    "long_call": _leg(long_call, long_call_mid),
                 },
                 "note": (
-                    "POP is a credit/delta heuristic. Pull live greeks and quotes "
-                    "before trading; verify credit and buying power."
+                    "POP is a delta heuristic. net_credit is derived from live "
+                    "bid/ask midpoints — verify before trading."
                 ),
             }
         except Exception as exc:  # noqa: BLE001

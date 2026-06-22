@@ -67,6 +67,14 @@ def _greek(sym):
     )
 
 
+def _quote(sym, bid="1.10", ask="1.30"):
+    return SimpleNamespace(
+        event_symbol=sym,
+        bid_price=Decimal(bid),
+        ask_price=Decimal(ask),
+    )
+
+
 @pytest.fixture
 def patched_chain(monkeypatch):
     chain = _chain()
@@ -196,6 +204,48 @@ async def test_atm_window_limits_strikes(make_config, call_tool, monkeypatch):
     assert res["ok"]
     strikes = {float(e["strike_price"]) for e in res["chain"][str(NEAR)]}
     assert strikes == {570.0, 575.0, 580.0, 585.0, 590.0}
+
+
+async def test_quotes_merged_per_strike(make_config, call_tool, patched_chain, monkeypatch):
+    async def fake_collect(_session, symbols, _timeout):
+        return {s: _quote(s) for s in symbols}
+
+    monkeypatch.setattr(market, "_collect_quotes", fake_collect)
+    mcp = build_server(make_config())
+    res = await call_tool(
+        mcp, "get_option_chain", {"symbol": "XSP", "include_quotes": True}
+    )
+    assert res["ok"] and res["quotes_included"] is True
+    assert res["quotes_complete"] is True
+    entry = res["chain"][str(NEAR)][0]
+    assert entry["bid"] == 1.10
+    assert entry["ask"] == 1.30
+    assert entry["mid"] == 1.20
+
+
+async def test_chain_without_quotes_has_no_bid_ask(make_config, call_tool, patched_chain, monkeypatch):
+    async def boom(*a, **k):
+        raise AssertionError("quotes should not be fetched")
+
+    monkeypatch.setattr(market, "_collect_quotes", boom)
+    mcp = build_server(make_config())
+    res = await call_tool(mcp, "get_option_chain", {"symbol": "XSP"})
+    assert res["ok"]
+    entry = res["chain"][str(NEAR)][0]
+    assert "bid" not in entry and "ask" not in entry
+
+
+async def test_partial_quotes_reported_incomplete(make_config, call_tool, patched_chain, monkeypatch):
+    async def fake_collect(_session, symbols, _timeout):
+        return {symbols[0]: _quote(symbols[0])}
+
+    monkeypatch.setattr(market, "_collect_quotes", fake_collect)
+    mcp = build_server(make_config())
+    res = await call_tool(
+        mcp, "get_option_chain", {"symbol": "XSP", "include_quotes": True}
+    )
+    assert res["quotes_complete"] is False
+    assert res["quotes_received"] == 1
 
 
 async def test_atm_window_bounds_greeks_subscription(make_config, call_tool, monkeypatch):

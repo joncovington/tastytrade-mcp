@@ -63,6 +63,36 @@ async def test_strategies_builds_iron_condor(make_config, call_tool):
     assert res["strategy"] == "iron_condor"
     assert set(res["legs"]) == {"short_put", "long_put", "short_call", "long_call"}
     assert 0 <= res["estimated_pop"] <= 1
+    # net_credit is None when quotes aren't available (mock doesn't stream quotes).
+    assert "net_credit" in res
+    assert "quotes_complete" in res
+
+
+async def test_strategies_net_credit_from_quotes(make_config, call_tool, monkeypatch):
+    """When quotes are available, net_credit is derived from leg midpoints."""
+    from decimal import Decimal
+    from types import SimpleNamespace
+    from tastytrade_mcp.tools import strategy
+
+    async def fake_quotes(_session, symbols, _timeout):
+        # short legs: mid=1.20, long legs: mid=0.30 => net credit = (1.20+1.20)-(0.30+0.30) = 1.80
+        return {
+            s: SimpleNamespace(bid_price=Decimal("1.10"), ask_price=Decimal("1.30"))
+            if i % 2 == 0
+            else SimpleNamespace(bid_price=Decimal("0.25"), ask_price=Decimal("0.35"))
+            for i, s in enumerate(symbols)
+        }
+
+    monkeypatch.setattr(strategy, "_collect_quotes", fake_quotes)
+    mcp = build_server(make_config())
+    res = await call_tool(mcp, "get_strategies", {"symbol": "XSP", "target_dte": 1})
+    assert res["ok"]
+    assert res["quotes_complete"] is True
+    assert res["net_credit"] is not None
+    assert res["net_credit_per_contract"] == round(res["net_credit"] * 100, 2)
+    # Each leg's mid is present.
+    for leg in res["legs"].values():
+        assert leg["mid"] is not None
 
 
 async def test_execute_iron_condor_dry_run(make_config, call_tool, fake_account):

@@ -152,6 +152,7 @@ class FakeOption:
         self.strike_price = Decimal(str(strike))
         self.option_type = option_type  # "Call" / "Put"
         self.symbol = symbol
+        self.streamer_symbol = f".{symbol.replace(' ', '')}"
 
 
 def build_fake_chain():
