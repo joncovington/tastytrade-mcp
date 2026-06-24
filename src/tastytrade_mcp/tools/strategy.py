@@ -11,7 +11,7 @@ from tastytrade.instruments import get_option_chain
 from ..config import Config
 from ..session import get_session
 from ._helpers import error_payload, serialize
-from .market import _collect_quotes, _num
+from .market import _atm_window, _collect_greeks, _collect_quotes, _num
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,8 @@ def register(mcp, config: Config) -> None:
         target_dte: int = 45,
         wing_width: int = 5,
         short_delta: float = 0.16,
+        around_price: float | None = None,
+        greeks_timeout: float = 6.0,
         quotes_timeout: float = 6.0,
     ) -> dict[str, Any]:
         """Build candidate iron condor setups for an underlying.
@@ -37,6 +39,11 @@ def register(mcp, config: Config) -> None:
         width. Returns the four legs (short/long put, short/long call), an
         estimated probability of profit, and a live net credit estimate derived
         from bid/ask midpoints on each leg.
+
+        Short strike selection uses live greeks from the DXLink feed when
+        available (recommended — pass ``around_price`` to center the greeks
+        window on the underlying's last price). Falls back to a positional
+        heuristic when greeks are unavailable.
 
         ``net_credit`` is the per-share credit (multiply by 100 for the contract
         dollar value). It is ``null`` when quotes are unavailable — in that case
@@ -49,6 +56,10 @@ def register(mcp, config: Config) -> None:
             wing_width: Distance in strikes between short and long legs.
             short_delta: Target absolute delta for the short strikes (~0.16
                 corresponds to roughly a 1-standard-deviation short strike).
+            around_price: Underlying last price — centers the greeks window
+                for accurate delta-based strike selection. Pass this from
+                ``get_market_overview`` for best results.
+            greeks_timeout: Seconds to wait for live greeks from DXLink.
             quotes_timeout: Seconds to wait for bid/ask quotes from DXLink
                 before returning without a credit estimate.
         """
@@ -60,7 +71,7 @@ def register(mcp, config: Config) -> None:
 
             expirations = sorted(chain.keys())
             expiration = _nearest_expiration(expirations, target_dte)
-            options = chain[expiration]
+            options = list(chain[expiration])
 
             calls = sorted(
                 (o for o in options if _is_call(o)),
@@ -76,8 +87,19 @@ def register(mcp, config: Config) -> None:
                     "error": f"Incomplete chain for {symbol} {expiration}.",
                 }
 
-            short_call, long_call = _select_call_spread(calls, wing_width)
-            short_put, long_put = _select_put_spread(puts, wing_width)
+            # Fetch live greeks for a window of strikes to drive delta selection.
+            # Use a 40-strike window each side to cover typical 0.10–0.30 delta
+            # targets while keeping the subscription manageable.
+            window = _atm_window(options, strike_count=40, around_price=around_price)
+            window_symbols = [
+                getattr(o, "streamer_symbol", None) for o in window
+                if getattr(o, "streamer_symbol", None)
+            ]
+            greeks = await _collect_greeks(session, window_symbols, greeks_timeout)
+
+            short_call, long_call = _select_call_spread(calls, wing_width, short_delta, greeks)
+            short_put, long_put = _select_put_spread(puts, wing_width, short_delta, greeks)
+            greeks_used = bool(greeks)
 
             # Without live deltas we approximate POP from the short-delta input:
             # an iron condor's win probability ~ 1 - 2 * short_delta.
@@ -127,6 +149,7 @@ def register(mcp, config: Config) -> None:
                 "net_credit": net_credit,
                 "net_credit_per_contract": round(net_credit * 100, 2) if net_credit is not None else None,
                 "quotes_complete": all(m is not None for m in mids),
+                "greeks_used_for_strike_selection": greeks_used,
                 "legs": {
                     "short_put": _leg(short_put, short_put_mid),
                     "long_put": _leg(long_put, long_put_mid),
@@ -153,15 +176,60 @@ def _is_put(option: Any) -> bool:
     return "p" in ot
 
 
-def _select_call_spread(calls: list[Any], wing_width: int) -> tuple[Any, Any]:
-    """Short call near the upper third of strikes, long ``wing_width`` higher."""
+def _select_call_spread(
+    calls: list[Any], wing_width: int, short_delta: float, greeks: dict[str, Any]
+) -> tuple[Any, Any]:
+    """Short call nearest to +short_delta; long leg wing_width strikes higher.
+
+    Falls back to the upper-third positional heuristic when greeks are absent.
+    """
+    if greeks:
+        best = _closest_by_delta(calls, short_delta, greeks)
+        if best is not None:
+            idx = calls.index(best)
+            long_idx = min(len(calls) - 1, idx + wing_width)
+            return calls[idx], calls[long_idx]
+    # Fallback: positional heuristic (upper third of the sorted call list).
     idx = max(0, int(len(calls) * 0.66) - 1)
     long_idx = min(len(calls) - 1, idx + wing_width)
     return calls[idx], calls[long_idx]
 
 
-def _select_put_spread(puts: list[Any], wing_width: int) -> tuple[Any, Any]:
-    """Short put near the lower third of strikes, long ``wing_width`` lower."""
+def _select_put_spread(
+    puts: list[Any], wing_width: int, short_delta: float, greeks: dict[str, Any]
+) -> tuple[Any, Any]:
+    """Short put nearest to -short_delta; long leg wing_width strikes lower.
+
+    Falls back to the lower-third positional heuristic when greeks are absent.
+    """
+    if greeks:
+        best = _closest_by_delta(puts, -short_delta, greeks)
+        if best is not None:
+            idx = puts.index(best)
+            long_idx = max(0, idx - wing_width)
+            return puts[idx], puts[long_idx]
+    # Fallback: positional heuristic (lower third of the sorted put list).
     idx = min(len(puts) - 1, int(len(puts) * 0.33))
     long_idx = max(0, idx - wing_width)
     return puts[idx], puts[long_idx]
+
+
+def _closest_by_delta(
+    options: list[Any], target_delta: float, greeks: dict[str, Any]
+) -> Any | None:
+    """Return the option whose live delta is closest to target_delta, or None."""
+    best: Any = None
+    best_diff = float("inf")
+    for o in options:
+        sym = getattr(o, "streamer_symbol", None)
+        g = greeks.get(sym) if sym else None
+        if g is None:
+            continue
+        delta = _num(getattr(g, "delta", None))
+        if delta is None:
+            continue
+        diff = abs(delta - target_delta)
+        if diff < best_diff:
+            best_diff = diff
+            best = o
+    return best

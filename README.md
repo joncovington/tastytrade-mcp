@@ -101,6 +101,49 @@ Claude Desktop / Claude Code MCP config:
 `execute_trade`, `adjust_order`, `close_position`, `manage_watchlist`.
 Order tools default to `dry_run=true` (validate without submitting).
 
+### Delta-based iron condor construction
+
+`get_strategies` builds a complete iron condor candidate with live credit and POP
+estimates. Pass `around_price` (the underlying's last price from `get_market_overview`)
+so strike selection uses **live greeks** from the DXLink feed — without it, the
+tool cannot center its greeks window and falls back to a positional heuristic
+that will pick the wrong strikes on large chains (e.g. XSP, SPX):
+
+```jsonc
+get_strategies({
+  "symbol": "XSP",
+  "target_dte": 0,
+  "short_delta": 0.15,
+  "wing_width": 5,
+  "around_price": 738.50    // always pass — required for delta-accurate strikes
+})
+// -> {
+//   "ok": true,
+//   "strategy": "iron_condor",
+//   "net_credit": 1.20,
+//   "net_credit_per_contract": 120.0,
+//   "estimated_pop": 0.70,
+//   "quotes_complete": true,
+//   "greeks_used_for_strike_selection": true,   // false = fell back to heuristic
+//   "legs": {
+//     "short_put":  { "strike_price": "736", "symbol": "XSP...P736", ... },
+//     "long_put":   { "strike_price": "731", "symbol": "XSP...P731", ... },
+//     "short_call": { "strike_price": "739", "symbol": "XSP...C739", ... },
+//     "long_call":  { "strike_price": "744", "symbol": "XSP...C744", ... }
+//   }
+// }
+```
+
+**`greeks_used_for_strike_selection`** — check this field before acting on the
+result. When `false`, the greeks feed was unavailable and the tool fell back to
+picking the lower/upper third of the full strike list, which is rarely the right
+delta on a large chain. Cross-check the returned strikes against `get_option_chain`
+deltas before entry.
+
+**`quotes_complete`** — when `false`, `net_credit` is `null` (the DXLink quote
+feed was temporarily unavailable). Do not estimate credit from strike prices;
+retry next iteration.
+
 ### Per-strike greeks on the option chain
 
 `get_option_chain` returns instrument fields per strike by default. Pass
