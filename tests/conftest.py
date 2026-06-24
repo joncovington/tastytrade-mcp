@@ -202,8 +202,12 @@ def mock_sdk(monkeypatch, fake_account):
     async def fake_chain_fn(_session, symbol):
         return chain
 
+    async def fake_last_prices(_session, symbols, _timeout):
+        return {s: 500.0 for s in symbols}
+
     monkeypatch.setattr(Account, "get", fake_get)
     monkeypatch.setattr(market, "get_market_metrics", fake_metrics)
+    monkeypatch.setattr(market, "_collect_last_prices", fake_last_prices)
     monkeypatch.setattr(market, "get_option_chain", fake_chain_fn)
     monkeypatch.setattr(strategy, "get_option_chain", fake_chain_fn)
 

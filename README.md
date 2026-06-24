@@ -101,6 +101,22 @@ Claude Desktop / Claude Code MCP config:
 `execute_trade`, `adjust_order`, `close_position`, `manage_watchlist`.
 Order tools default to `dry_run=true` (validate without submitting).
 
+### Underlying last price
+
+`get_market_overview` now includes a **`last`** field (most recent trade price
+from DXLink) alongside the IV metrics for each symbol. Pass it directly as
+`around_price` in `get_strategies` and `get_option_chain`:
+
+```jsonc
+get_market_overview({ "symbols": ["XSP"] })
+// -> { "ok": true, "metrics": [{ "symbol": "XSP", "last": 736.55,
+//      "implied_volatility_index_rank": "0.48", ... }] }
+```
+
+`last` is streamed in parallel with the metrics fetch (best-effort, 4 s timeout).
+It is omitted per symbol when the DXLink feed is unavailable — fall back to the
+ATM strike from `get_option_chain` in that case.
+
 ### Delta-based iron condor construction
 
 `get_strategies` builds a complete iron condor candidate with live credit and POP

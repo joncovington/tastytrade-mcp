@@ -65,6 +65,44 @@ async def _collect_greeks(
     return out
 
 
+async def _collect_last_prices(
+    session: Any, symbols: list[str], timeout: float
+) -> dict[str, float]:
+    """Stream the last trade price for each underlying symbol via DXLink.
+
+    Returns a mapping of symbol -> last price (float). Best-effort: missing
+    entries mean the feed didn't respond in time, not that trading is broken.
+    """
+    from tastytrade import DXLinkStreamer
+    from tastytrade.dxfeed import Trade
+
+    out: dict[str, float] = {}
+    if not symbols:
+        return out
+
+    async def _drain(streamer) -> None:
+        remaining = set(symbols)
+        async for event in streamer.listen(Trade):
+            price = _num(event.price)
+            if price is not None:
+                out[event.event_symbol] = price
+            remaining.discard(event.event_symbol)
+            if not remaining:
+                return
+
+    try:
+        async with DXLinkStreamer(session) as streamer:
+            await streamer.subscribe(Trade, symbols)
+            await asyncio.wait_for(_drain(streamer), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.info(
+            "last-price collection timed out (%d/%d received)", len(out), len(symbols)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("last-price collection failed: %s", exc)
+    return out
+
+
 async def _collect_quotes(
     session: Any, streamer_symbols: list[str], timeout: float
 ) -> dict[str, Any]:
@@ -136,19 +174,41 @@ def _atm_window(
 
 def register(mcp, config: Config) -> None:
     @mcp.tool()
-    async def get_market_overview(symbols: list[str]) -> dict[str, Any]:
-        """Scan symbols for market metrics.
+    async def get_market_overview(
+        symbols: list[str],
+        quotes_timeout: float = 4.0,
+    ) -> dict[str, Any]:
+        """Scan symbols for market metrics and last price.
 
-        Returns implied volatility rank/percentile, IV, beta, liquidity, and
-        upcoming earnings (when available) for each underlying symbol.
+        Returns implied volatility rank/percentile, IV, beta, liquidity,
+        upcoming earnings (when available), and the current last trade price
+        for each underlying symbol.
+
+        ``last`` is the most recent trade price from the DXLink feed (best
+        effort — omitted per symbol when the feed is unavailable). Pass it
+        directly as ``around_price`` in ``get_strategies`` and
+        ``get_option_chain`` to center delta/strike selection on the live price.
 
         Args:
             symbols: Underlying ticker symbols, e.g. ["SPY", "QQQ", "AAPL"].
+            quotes_timeout: Seconds to wait for last-trade prices from DXLink.
         """
         try:
             session = get_session(config)
-            metrics = await get_market_metrics(session, [s.upper() for s in symbols])
-            return {"ok": True, "metrics": serialize(metrics)}
+            upper = [s.upper() for s in symbols]
+            metrics, trades = await asyncio.gather(
+                get_market_metrics(session, upper),
+                _collect_last_prices(session, upper, quotes_timeout),
+            )
+            serialized = serialize(metrics)
+            for entry in serialized:
+                if not isinstance(entry, dict):
+                    continue
+                sym = entry.get("symbol", "")
+                last = trades.get(sym)
+                if last is not None:
+                    entry["last"] = last
+            return {"ok": True, "metrics": serialized}
         except Exception as exc:  # noqa: BLE001
             logger.warning("get_market_overview failed: %s", exc)
             return error_payload(exc)
