@@ -6,11 +6,9 @@ import logging
 from datetime import date
 from typing import Any
 
-from tastytrade.instruments import get_option_chain
-
 from ..config import Config
 from ..session import get_session
-from ._helpers import error_payload, serialize
+from ._helpers import contract_multiplier, error_payload, fetch_chain, serialize
 from .market import _atm_window, _collect_greeks, _collect_quotes, _num
 
 logger = logging.getLogger(__name__)
@@ -51,7 +49,7 @@ def register(mcp, config: Config) -> None:
         expiration to get individual leg prices.
 
         Args:
-            symbol: Underlying ticker symbol, e.g. "SPY".
+            symbol: Underlying ticker symbol (equity: "SPY"; futures: "/ES").
             target_dte: Desired days to expiration (default 45).
             wing_width: Distance in strikes between short and long legs.
             short_delta: Target absolute delta for the short strikes (~0.16
@@ -65,7 +63,7 @@ def register(mcp, config: Config) -> None:
         """
         try:
             session = get_session(config)
-            chain = await get_option_chain(session, symbol.upper())
+            chain = await fetch_chain(session, symbol.upper())
             if not chain:
                 return {"ok": False, "error": f"No option chain for {symbol}."}
 
@@ -129,6 +127,7 @@ def register(mcp, config: Config) -> None:
 
             mids = [short_put_mid, long_put_mid, short_call_mid, long_call_mid]
             net_credit: float | None = None
+            multiplier = contract_multiplier(short_put)
             if all(m is not None for m in mids):
                 net_credit = round(
                     (short_put_mid + short_call_mid) - (long_put_mid + long_call_mid), 4  # type: ignore[operator]
@@ -147,7 +146,8 @@ def register(mcp, config: Config) -> None:
                 "dte": (expiration - date.today()).days,
                 "estimated_pop": estimated_pop,
                 "net_credit": net_credit,
-                "net_credit_per_contract": round(net_credit * 100, 2) if net_credit is not None else None,
+                "contract_multiplier": multiplier,
+                "net_credit_per_contract": round(net_credit * multiplier, 2) if net_credit is not None else None,
                 "quotes_complete": all(m is not None for m in mids),
                 "greeks_used_for_strike_selection": greeks_used,
                 "legs": {

@@ -117,6 +117,26 @@ get_market_overview({ "symbols": ["XSP"] })
 It is omitted per symbol when the DXLink feed is unavailable — fall back to the
 ATM strike from `get_option_chain` in that case.
 
+### Futures options
+
+Both `get_option_chain` and `get_strategies` work with futures-options underlyings.
+Pass the futures root symbol prefixed with `/`:
+
+```jsonc
+get_option_chain({ "symbol": "/ES", "expiration": "2026-06-27",
+                   "include_greeks": true, "around_price": 5650.0 })
+
+get_strategies({ "symbol": "/ES", "target_dte": 0, "short_delta": 0.10,
+                 "wing_width": 25, "around_price": 5650.0 })
+```
+
+The response shape is identical to equity options. `instrument_type` on each leg
+will be `"Future Option"` instead of `"Equity Option"` — use the correct value
+when constructing order legs for `execute_trade`. `contract_multiplier` in the
+`get_strategies` response reflects the option-to-futures ratio (typically `1.0`);
+the *dollar* value per point depends on the underlying futures contract's own
+multiplier (e.g. $50/point for `/ES`, $5/point for `/MES`) — verify before sizing.
+
 ### Delta-based iron condor construction
 
 `get_strategies` builds a complete iron condor candidate with live credit and POP

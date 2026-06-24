@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from tastytrade.account import Account
+from tastytrade.instruments import get_option_chain
 
 from .. import credentials
 from ..config import Config
@@ -40,6 +41,34 @@ async def get_account(config: Config, account_number: str | None = None) -> Acco
     if not accounts:
         raise RuntimeError("No accounts found for these credentials.")
     return accounts[0]
+
+
+async def fetch_chain(session: Any, symbol: str) -> dict:
+    """Fetch the option chain for equity or futures-option underlyings.
+
+    Dispatches to ``get_future_option_chain`` when ``symbol`` starts with ``/``
+    (e.g. ``/ES``, ``/NQ``) and to ``get_option_chain`` otherwise.
+    Returns ``dict[date, list[Option | FutureOption]]``.
+    """
+    if symbol.startswith("/"):
+        from tastytrade.instruments import get_future_option_chain
+        return await get_future_option_chain(session, symbol)
+    return await get_option_chain(session, symbol)
+
+
+def contract_multiplier(option: Any) -> float:
+    """Return the per-contract unit multiplier for an option leg.
+
+    Equity options report ``shares_per_contract`` (always 100).
+    Futures options report ``multiplier`` — the option-to-futures ratio
+    (typically 1.0); note the *dollar* value per point also depends on the
+    underlying futures contract's own point value and is not captured here.
+    """
+    return float(
+        getattr(option, "shares_per_contract", None)
+        or getattr(option, "multiplier", None)
+        or 100
+    )
 
 
 def error_payload(exc: Exception) -> dict[str, Any]:

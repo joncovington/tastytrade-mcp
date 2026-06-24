@@ -7,12 +7,11 @@ import logging
 from datetime import date
 from typing import Any
 
-from tastytrade.instruments import get_option_chain
 from tastytrade.metrics import get_market_metrics
 
 from ..config import Config
 from ..session import get_session
-from ._helpers import error_payload, serialize
+from ._helpers import error_payload, fetch_chain, serialize
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +230,7 @@ def register(mcp, config: Config) -> None:
         when requested, live per-strike greeks and/or bid/ask quotes.
 
         Args:
-            symbol: Underlying ticker symbol, e.g. "SPY".
+            symbol: Underlying ticker symbol (equity: "SPY"; futures: "/ES").
             expiration: ISO date (YYYY-MM-DD) to return only that expiration.
                 Recommended with ``include_greeks`` or ``include_quotes`` to
                 bound the data fetched.
@@ -255,7 +254,7 @@ def register(mcp, config: Config) -> None:
         """
         try:
             session = get_session(config)
-            chain = await get_option_chain(session, symbol.upper())
+            chain = await fetch_chain(session, symbol.upper())
             if not chain:
                 return {"ok": False, "error": f"No option chain for {symbol}."}
 

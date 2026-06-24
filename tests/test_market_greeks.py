@@ -82,7 +82,7 @@ def patched_chain(monkeypatch):
     async def fake_chain(_session, _symbol):
         return chain
 
-    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    monkeypatch.setattr(market, "fetch_chain", fake_chain)
     return chain
 
 
@@ -162,7 +162,7 @@ async def test_default_strike_count_is_15(make_config, call_tool, monkeypatch):
     async def fake_chain(_session, _symbol):
         return chain
 
-    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    monkeypatch.setattr(market, "fetch_chain", fake_chain)
     mcp = build_server(make_config())
     res = await call_tool(mcp, "get_option_chain", {"symbol": "XSP"})
     strikes = {float(e["strike_price"]) for e in res["chain"][str(NEAR)]}
@@ -178,7 +178,7 @@ async def test_full_chain_when_strike_count_none(make_config, call_tool, monkeyp
     async def fake_chain(_session, _symbol):
         return chain
 
-    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    monkeypatch.setattr(market, "fetch_chain", fake_chain)
     mcp = build_server(make_config())
     res = await call_tool(
         mcp, "get_option_chain", {"symbol": "XSP", "strike_count": None}
@@ -193,7 +193,7 @@ async def test_atm_window_limits_strikes(make_config, call_tool, monkeypatch):
     async def fake_chain(_session, _symbol):
         return chain
 
-    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    monkeypatch.setattr(market, "fetch_chain", fake_chain)
     mcp = build_server(make_config())
     # Center on 580 with 2 strikes each side -> strikes 570,575,580,585,590.
     res = await call_tool(
@@ -259,7 +259,7 @@ async def test_atm_window_bounds_greeks_subscription(make_config, call_tool, mon
         captured["symbols"] = symbols
         return {s: _greek(s) for s in symbols}
 
-    monkeypatch.setattr(market, "get_option_chain", fake_chain)
+    monkeypatch.setattr(market, "fetch_chain", fake_chain)
     monkeypatch.setattr(market, "_collect_greeks", fake_collect)
     mcp = build_server(make_config())
     res = await call_tool(

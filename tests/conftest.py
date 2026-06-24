@@ -208,8 +208,8 @@ def mock_sdk(monkeypatch, fake_account):
     monkeypatch.setattr(Account, "get", fake_get)
     monkeypatch.setattr(market, "get_market_metrics", fake_metrics)
     monkeypatch.setattr(market, "_collect_last_prices", fake_last_prices)
-    monkeypatch.setattr(market, "get_option_chain", fake_chain_fn)
-    monkeypatch.setattr(strategy, "get_option_chain", fake_chain_fn)
+    monkeypatch.setattr(market, "fetch_chain", fake_chain_fn)
+    monkeypatch.setattr(strategy, "fetch_chain", fake_chain_fn)
 
     yield fake_account
     session.reset_session()
